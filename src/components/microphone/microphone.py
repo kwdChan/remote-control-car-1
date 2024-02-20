@@ -1,11 +1,15 @@
 
+from typing import Union, Tuple
 from pvrecorder import PvRecorder
 from scipy.fft import fft, fftfreq
 import numpy as np
 
 
 class MicrophoneReader:
-    def __init__(self, device_index, frame_length, signal_nframe, sxx_nframe):
+    def __init__(self, device_index: Union[int, None], frame_length, signal_nframe, sxx_nframe, device_name_match='usb'):
+        if device_index is None:
+            device_index, device_name = MicrophoneReader.try_get_devices(device_name_match)
+            print(f'using device: {device_name}')
 
         # recorder 
         recorder = PvRecorder(frame_length=frame_length, device_index=device_index)
@@ -15,7 +19,7 @@ class MicrophoneReader:
         # values 
         freqs = fftfreq(recorder.frame_length*signal_nframe, 1/recorder.sample_rate)
         n_freqs = int(len(freqs) //2)
-        freqs = freqs[:n_freqs]
+        freqs = freqs[:n_freqs] # type: ignore
         frame_duration = recorder.frame_length / recorder.sample_rate
 
         # buffer 
@@ -48,6 +52,15 @@ class MicrophoneReader:
     def show_devices():
         for index, device in enumerate(PvRecorder.get_available_devices()):
             print(f"[{index}] {device}")
+
+    @staticmethod
+    def try_get_devices(match_str:str) -> Tuple[int, str]:
+        devices = PvRecorder.get_available_devices()
+        for index, device in enumerate(devices):
+            if match_str.lower() in device.lower():
+                return index, device
+        return 0, devices[0]
+
 
 
 
