@@ -1,3 +1,4 @@
+from typing_extensions import deprecated
 import RPi.GPIO as GPIO
 import time
 from typing import List, Dict, Literal, Union
@@ -27,8 +28,13 @@ code2text = {
 }
 
 
-
+@deprecated("Don't use IR remotes for car control")
 class IRreciever:
+    """
+    Dev note:
+        IR isn't good for remote car control
+        If IR were to be used, pigpio should be used for a more precise timing
+    """
     def __init__(self, pin:int, logger:Logger, n_sample=2000, interval=5e-6):
         
         GPIO.setmode(GPIO.BOARD)
@@ -44,9 +50,13 @@ class IRreciever:
 
     def poll(self) -> int: 
         """
-        The callback pattern is better but IR is shit for this purpose anyway. So I can't bother to change it
-
         blocking until a signal is recieved
+
+
+        Dev note:
+            Don't use the callback pattern.
+            This forces the higher level components to also use callbacks. 
+            And callback chaining is not desirable. 
         """
         
         sig = trigger_read(self.pin, self.n_sample, interval=self.interval)  
@@ -106,9 +116,6 @@ def sig2bits(sig:np.ndarray, zero_maxlen=15, one_maxlen=50, max_noise_length=1) 
     """
     sometimes the signal be as short as 2 samples
     
-    
-    TODO: noise tolerant 
-
     noise tolerant testing 
     result[::6] = 0
     result[3::6] = 1

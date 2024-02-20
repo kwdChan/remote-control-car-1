@@ -9,7 +9,7 @@ class Camera:
         self.cap = cv2.VideoCapture(camera_idx)
         self.logger = logger
 
-    def step(self) -> Union[None, np.array]:
+    def step(self) -> Union[None, np.ndarray]:
         ret, img = self.cap.read()
 
         if ret:
@@ -18,7 +18,7 @@ class Camera:
             return img
         else:
             return None
-    
+    @staticmethod
     def main(camera_idx, logger: Logger): 
 
         component = Camera(camera_idx, logger)
@@ -27,7 +27,7 @@ class Camera:
             logger.increment_idx()
             img = component.step()
             
-
+    @staticmethod
     def start(camera_idx, logger_set: LoggerSet, **kwargs):
 
         logger = logger_set.get_logger(**kwargs)
