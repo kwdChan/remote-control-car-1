@@ -1,5 +1,8 @@
 from typing import Callable, List, Union
+from typing_extensions import deprecated
 import numpy as np
+
+from data_collection import Logger, LoggerSet
 from .viz import get_table, get_power_plot
 from .microphone import MicrophoneReader
 from plotly.graph_objects import FigureWidget
@@ -10,52 +13,85 @@ from multiprocessing.connection import Connection
 
 
 class AhhhhhWheelController:
-    def __init__(self, microphone: MicrophoneReader):
+    def __init__(self, microphone: MicrophoneReader, logger: Logger):
         self.ahhhhh_detector = AhhhhhDetector(microphone)
+        self.logger = logger
 
         # state 
-        self.pitch = [np.nan, np.nan, np.nan]
-        self.last_step_valid = False
+        self.pitch_hist = [np.nan, np.nan, np.nan]
+        self.is_valid_hist = [False, False]
+        
+
     def step(self):
         """
         TODO: 
         """
         latest_sxx, detected_freqs, strengths, basefreq, pitch = self.ahhhhh_detector.step()
 
-        self.pitch = self.pitch[1:] + [pitch]
+        self.pitch_hist = self.pitch_hist[1:] + [pitch]
 
-        max_diff = np.nanmax(self.pitch) - np.nanmin(self.pitch)
 
-        this_step_valid = (max_diff<75) and (latest_sxx[1:].mean()>20)
+        max_diff = 0
+        for i in range(len(self.pitch_hist)-1):
+            for j in range(i, len(self.pitch_hist)):
+                max_diff = np.nanmax([max_diff, angle_deg_between(self.pitch_hist[i], self.pitch_hist[j])])
+        
+        this_step_valid = (max_diff<60) and (latest_sxx[1:].mean()>20)
+        
     
-        if this_step_valid and self.last_step_valid:            
+        if this_step_valid and all(self.is_valid_hist):            
             speed = 80
         else: 
             speed = 0
 
-        self.last_step_valid = this_step_valid
+        self.is_valid_hist = self.is_valid_hist[1:] + [this_step_valid]
 
-        balance = (np.nanmedian(pitch) - 180)/360 + 0.5
-        balance = max(0, balance)
-        balance = min(1, balance)
-        
+        # use np.nanmedian(self.pitch_hist) so that it is more resilient to rare nan
+        balance = angle2proportion(np.nanmedian(self.pitch_hist), 220, 60)
+
+
+        self.logger.log_time()
+        self.logger.log('pitch', pitch)
+        self.logger.log('basefreq', basefreq)
+        self.logger.log('latest_sxx', latest_sxx)
+        self.logger.log('detected_freqs', detected_freqs)
+        self.logger.log('speed_or_invalid', speed)
+        self.logger.log('median pitch', np.nanmedian(self.pitch_hist))
+        self.logger.log('balance', balance)
+
+
         return balance*speed, (1-balance)*speed
 
 
 
     @staticmethod
-    def main(index, sender: Connection, frame_length=800, signal_nframe=5, sxx_nframe=5):
+    def main(index, sender: Connection, frame_length, signal_nframe, sxx_nframe, logger_set: LoggerSet, **kwargs):
+        """
+        for a sample rate of  16000, use
+            frame_length: 800
+            signal_nframe: 5
+            sxx_nframe: 5 (much less important)
+        """
+
+        logger = logger_set.get_logger(**kwargs)
         mic = MicrophoneReader(index, frame_length, signal_nframe, sxx_nframe)
-        component = AhhhhhWheelController(mic)
+        component = AhhhhhWheelController(mic, logger)
         while True:
+            logger.increment_idx()
             result  = component.step()
             sender.send(result)
 
     @staticmethod
-    def start(index, frame_length=800, signal_nframe=5, sxx_nframe=5):
+    def start(index, frame_length, signal_nframe, sxx_nframe, logger_set: LoggerSet, **kwargs):
+        """
+        for a sample rate of  16000, use
+            frame_length: 800
+            signal_nframe: 5
+            sxx_nframe: 5 (much less important)
+        """
         receiver, sender = Pipe(False)
         
-        p = Process(target=AhhhhhWheelController.main, args=(index, sender, frame_length, signal_nframe, sxx_nframe))
+        p = Process(target=AhhhhhWheelController.main, args=(index, sender, frame_length, signal_nframe, sxx_nframe, logger_set), kwargs=kwargs)
         p.start()
         return p, receiver
         
@@ -94,7 +130,8 @@ class AhhhhhDetector:
         mic.sample()
 
         latest_sxx = mic.sxx_buffer[-1]
-        latest_sxx = latest_sxx[np.where(freqs < 2000) ]
+        latest_sxx = latest_sxx#[np.where(freqs < 2000)]
+        
 
         # normalise againist other frequencies (not time)
         latest_sxx_norm = normalise(latest_sxx)
@@ -134,11 +171,41 @@ class AhhhhhDetector:
                 
             idx += 1
 
+def angle_deg_between(a1, a2):
+    return min((a1-a2)%360, (a2-a1)%360)
+
+def angle2proportion(angle_deg, centre, scale_oneside):
+    """
+    scale_oneside: (0, 180]
+
+    mapped an angle to a number 
+        centre + scale_oneside -> 1
+        centre + 0             -> 0.5
+        centre - scale_oneside -> 0
+    """
+    angle_centred = (angle_deg - centre) % 360
+    if angle_centred > 180:
+        angle_centred = angle_centred - 360
+
+    # angle_centred: (-180, 180]
+
+    proportion = angle_centred/(scale_oneside*2) + 0.5
+    proportion = min(proportion, 1)
+    proportion = max(proportion, 0)
+    return proportion
+
+def total_pitch_power(arr, fundamental_idx, bandwidth_idx=1, n_harmonics=4):
+    indices = np.arange(1, n_harmonics+1, dtype=int)*fundamental_idx
+
+    total_power = 0
+    for i in indices:
+        total_power += arr[i-bandwidth_idx: i+bandwidth_idx+1].sum()
+    return total_power
 
 
 
 
-
+@deprecated("use total_pitch_power")
 def get_freq_bands(values, freqs, threshold, peak_threshold):
 
     values = np.array(values)
@@ -172,7 +239,7 @@ def get_freq_bands(values, freqs, threshold, peak_threshold):
     return freq_centres, freq_peak_powers
 
 
-
+@deprecated("use total_pitch_power")
 def normalise(values):
     median = np.median(values)
     mad = np.median(abs(values-median))
@@ -180,7 +247,7 @@ def normalise(values):
     return (values - median)/mad
 
 
-
+@deprecated("use total_pitch_power")
 def find_peaks(normalised, freqs):
 
 
@@ -206,7 +273,7 @@ def freq_to_pitch(freq):
     return (np.log2(freq) % 1) * 360
 
 
-
+@deprecated("use total_pitch_power")
 def find_basefreq(freqs):
 
     freqs = [0] + [f for f in freqs if f > 40]
