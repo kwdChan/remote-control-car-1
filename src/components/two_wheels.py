@@ -381,8 +381,10 @@ class TwoWheels:
         self.ch_left.ChangeDutyCycle(left)
         self.ch_right.ChangeDutyCycle(right)
         
+        self.logger.log_time('time')
         self.logger.log('left', left)
         self.logger.log('right', right)
+
     @staticmethod    
     def sample(input_con: Connection) -> Tuple[Union[None, int], Union[None, int]]:
         """
