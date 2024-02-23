@@ -2,7 +2,7 @@ from typing import Callable, List, Union
 from typing_extensions import deprecated
 import numpy as np
 
-from data_collection import Logger, LoggerSet
+from data_collection.data_collection import LoggerSet, Logger
 from .viz import get_table, get_power_plot
 from .microphone import MicrophoneReader
 from plotly.graph_objects import FigureWidget

@@ -5,7 +5,7 @@ import pandas as pd
 import RPi.GPIO as GPIO
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-from data_collection import Logger, LoggerSet
+from data_collection.data_collection import LoggerSet, Logger
 
 def setup_pwm(pin, freq=300) -> GPIO.PWM:
     GPIO.setup(pin, GPIO.OUT)

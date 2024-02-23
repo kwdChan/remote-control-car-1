@@ -4,7 +4,7 @@ import time
 from typing import List, Dict, Literal, Union
 import datetime
 import numpy as np
-from data_collection import Logger, LoggerSet
+from data_collection.data_collection import LoggerSet, Logger
 
 
 from multiprocessing import Pipe, Process

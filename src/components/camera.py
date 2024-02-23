@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from typing import List, Dict, Literal, Union
-from data_collection import LoggerSet, Logger
+from data_collection.data_collection import LoggerSet, Logger
 from multiprocessing import Process
 
 class Camera:

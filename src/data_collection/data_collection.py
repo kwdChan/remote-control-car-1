@@ -109,3 +109,14 @@ class Logger:
         result = pd.DataFrame(result)
         return result.pivot(index='idx', columns=['key']).droplevel(0, 1)
 
+
+    def convert_camera_data_for_transfer(self, img_key, min_idx=0, max_idx=9999,):
+        
+        raise NotImplementedError()
+        for idx in range(min_idx, max_idx+1):
+            path = self.path/f"{idx}.pkl"
+            if not path.exists(): 
+                continue
+
+        pass
+                    

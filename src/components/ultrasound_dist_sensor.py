@@ -2,7 +2,7 @@
 import RPi.GPIO as GPIO
 import time
 from datetime import datetime, timedelta
-from data_collection import Logger, LoggerSet
+from data_collection.data_collection import LoggerSet, Logger
 
 from multiprocessing.connection import Connection
 from multiprocessing import Pipe, Process
