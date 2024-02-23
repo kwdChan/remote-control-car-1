@@ -9,8 +9,8 @@ class LoggerSet:
     def __init__(self, path='../log/temp', overwrite_ok=False):
         path_obj = Path(path) 
         
-        if path_obj.exists():
-            assert overwrite_ok
+        # if path_obj.exists():
+        #     assert overwrite_ok
     
         path_obj.mkdir(parents=True, exist_ok=overwrite_ok)
 
@@ -32,7 +32,7 @@ class LoggerSet:
 
 class Logger:
 
-    def __init__(self, path='../log/temp', name='unnamed', save_interval:float=30, overwrite_ok=False):
+    def __init__(self, path: Union[Path, str] ='../log/temp', name='unnamed', save_interval:float=30, overwrite_ok=False):
         """
         a shared logger if all control components 
 
