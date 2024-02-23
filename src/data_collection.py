@@ -12,7 +12,7 @@ class LoggerSet:
         # if path_obj.exists():
         #     assert overwrite_ok
     
-        path_obj.mkdir(parents=True, exist_ok=overwrite_ok)
+        path_obj.mkdir(parents=True, exist_ok=True)
 
         
         self.path = path_obj
