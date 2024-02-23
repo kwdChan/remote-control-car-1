@@ -9,12 +9,13 @@ from plotly.graph_objects import FigureWidget
 
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
+from scipy.fft import fft, fftfreq
 
 
 
 class AhhhhhWheelController:
     def __init__(self, microphone: MicrophoneReader, logger: Logger):
-        self.ahhhhh_detector = AhhhhhDetector(microphone)
+        self.ahhhhh_detector = AhhhhhDetector(microphone, logger)
         self.logger = logger
 
         # state 
@@ -26,39 +27,32 @@ class AhhhhhWheelController:
         """
         TODO: 
         """
-        latest_sxx, detected_freqs, strengths, basefreq, pitch = self.ahhhhh_detector.step()
+        pitch_power, basefreq, pitch = self.ahhhhh_detector.step()
 
         self.pitch_hist = self.pitch_hist[1:] + [pitch]
-
 
         max_diff = 0
         for i in range(len(self.pitch_hist)-1):
             for j in range(i, len(self.pitch_hist)):
                 max_diff = np.nanmax([max_diff, angle_deg_between(self.pitch_hist[i], self.pitch_hist[j])])
         
-        this_step_valid = (max_diff<60) and (latest_sxx[1:].mean()>20)
+        this_step_valid = (max_diff<60) and (pitch_power>375)
         
     
         if this_step_valid and all(self.is_valid_hist):            
-            speed = 80
+            speed = 60
         else: 
             speed = 0
 
         self.is_valid_hist = self.is_valid_hist[1:] + [this_step_valid]
 
         # use np.nanmedian(self.pitch_hist) so that it is more resilient to rare nan
-        balance = angle2proportion(np.nanmedian(self.pitch_hist), 220, 60)
+        balance = angle2proportion(np.nanmedian(self.pitch_hist), 220, 120)
 
-
-        self.logger.log_time()
-        self.logger.log('pitch', pitch)
-        self.logger.log('basefreq', basefreq)
-        self.logger.log('latest_sxx', latest_sxx)
-        self.logger.log('detected_freqs', detected_freqs)
+        self.logger.log_time("AhhhhhWheelController")
         self.logger.log('speed_or_invalid', speed)
-        self.logger.log('median pitch', np.nanmedian(self.pitch_hist))
+        self.logger.log('median_pitch', np.nanmedian(self.pitch_hist))
         self.logger.log('balance', balance)
-
 
         return balance*speed, (1-balance)*speed
 
@@ -94,13 +88,14 @@ class AhhhhhWheelController:
         p = Process(target=AhhhhhWheelController.main, args=(index, sender, frame_length, signal_nframe, sxx_nframe, logger_set), kwargs=kwargs)
         p.start()
         return p, receiver
-        
+         
 
 
 
 class AhhhhhDetector:
-    def __init__(self, micophone: MicrophoneReader):
+    def __init__(self, micophone: MicrophoneReader, logger: Logger):
         self.micophone = micophone
+        self.logger = logger
 
         # state
         # visualisation objects 
@@ -123,53 +118,22 @@ class AhhhhhDetector:
         return table
 
     def step(self):
+        self.micophone.sample()
 
-        mic = self.micophone 
-        freqs = mic.freqs
+        latest_sxx = self.micophone.sxx_buffer[-1]
 
-        mic.sample()
-
-        latest_sxx = mic.sxx_buffer[-1]
-        latest_sxx = latest_sxx#[np.where(freqs < 2000)]
-        
-
-        # normalise againist other frequencies (not time)
-        latest_sxx_norm = normalise(latest_sxx)
-
-        # the strengths are relative to other frequencies (not time)
-        detected_freqs, strengths = get_freq_bands(latest_sxx_norm, freqs, 2, 4)
-
-        basefreq = find_basefreq(np.array(detected_freqs))  
+        basefreq, pitch_power = find_pitch_with_fft(latest_sxx,  self.micophone.freqs, freq_range=(90, 3000) )
 
         pitch = freq_to_pitch(basefreq) 
+
+        self.logger.log_time("AhhhhhDetector")
+        self.logger.log("latest_sxx", latest_sxx)
+        self.logger.log("basefreq", basefreq)
+        self.logger.log("pitch_power", pitch_power)
+        self.logger.log("pitch", pitch)
         
-        return latest_sxx, detected_freqs, strengths, basefreq, pitch
+        return pitch_power, basefreq, pitch
 
-
-    def loop(self, callbacks: List[Callable], table_update_interval=0, power_update_interval=0):
-        """
-        for notebook use only
-        don't do callback chain
-        """
-        idx = 0
-        while True:
-            latest_sxx, detected_freqs, strengths, basefreq, pitch = self.step()
-            
-            for cb in callbacks:
-                cb(latest_sxx, detected_freqs, strengths, basefreq, pitch)
-
-            if table_update_interval and (not idx % table_update_interval):
-                assert self.table_update, 'table graph not set up yet'
-                self.table_update(dict(
-                    frequency = detected_freqs, 
-                    strength = strengths, 
-                ))
-
-            if power_update_interval and (not idx % power_update_interval):
-                assert self.slice_update, 'power power no set up yet'
-                self.slice_update(latest_sxx)
-                
-            idx += 1
 
 def angle_deg_between(a1, a2):
     return min((a1-a2)%360, (a2-a1)%360)
@@ -194,15 +158,108 @@ def angle2proportion(angle_deg, centre, scale_oneside):
     proportion = max(proportion, 0)
     return proportion
 
-def total_pitch_power(arr, fundamental_idx, bandwidth_idx=1, n_harmonics=4):
-    indices = np.arange(1, n_harmonics+1, dtype=int)*fundamental_idx
+def rolling_mean(arr, kernel=np.ones(3)/3): 
+    return np.correlate(arr, kernel, mode='same')
+    
+def adjust(sxx, bandwidth=45):
+    return sxx - rolling_mean(sxx, np.ones(bandwidth)/bandwidth) 
 
+
+def fft_power_spectra(sxx, freqs):
+    sxx = sxx-sxx.mean()
+    y = fft(sxx)
+    freqs = fftfreq(len(freqs), freqs[1]-freqs[0])
+
+    pitch_power = y.real**2+y.imag**2 # type: ignore
+    return 1/freqs[:len(freqs)//2], pitch_power[:len(freqs)//2]
+
+
+def fft_power_spectra_masked_by_adjusted(sxx, freqs):
+    f, adjusted_sxx = fft_power_spectra(rolling_mean(adjust(sxx, bandwidth=20)), freqs)
+    f, sxx  = fft_power_spectra(sxx, freqs)
+
+    # TODO: constant
+    return f, sxx*(adjusted_sxx>(20e3)) 
+
+
+def find_pitch_with_fft(sxx, freqs, freq_range=(90, 600)):
+    freq_pitch, sxx_pitch = fft_power_spectra_masked_by_adjusted(sxx, freqs)
+    bidx = (freq_pitch>freq_range[0]) & (freq_pitch<freq_range[1])
+    argmax = np.argmax(sxx_pitch[bidx])
+
+    return freq_pitch[bidx][argmax], sxx_pitch[bidx][argmax]
+
+
+def find_pitch(sxx, freqs, freq_range=(90, 3000), idx_step=1, n_harmonics=5):
+    freq_of_power, powers = get_total_pitch_powers(
+        sxx, freqs, freq_range=freq_range, idx_step=idx_step, n_harmonics=n_harmonics
+        )
+    argmax = np.argmax(powers)
+    return freq_of_power[argmax], powers[argmax]
+    
+
+def get_total_pitch_powers(sxx, freqs, freq_range=(90, 3000), idx_step=1, n_harmonics=5):
+    idx_start = np.where(freqs < freq_range[0])[-1][-1]
+    idx_end = np.where(freqs < freq_range[-1])[-1][-1]
+
+    freq_of_power = []
+    powers = []
+    for freq_idx in range(idx_start, idx_end, idx_step):
+        power_ = total_pitch_power(sxx, freq_idx, bandwidth_idx=1, n_harmonics=n_harmonics)
+        powers.append(power_)
+        freq_of_power.append(freqs[freq_idx])
+    
+    return freq_of_power, powers
+
+
+def total_pitch_power(sxx, fundamental_idx, bandwidth_idx=1, n_harmonics=5):
+    """
+    TODO: index out of range at high frequency
+    """
+    nth_harmonics = np.arange(1, n_harmonics+1, dtype=int)
     total_power = 0
-    for i in indices:
-        total_power += arr[i-bandwidth_idx: i+bandwidth_idx+1].sum()
-    return total_power
+    n = 1
+    for n in nth_harmonics:
+        i = n*fundamental_idx
+        if (i+bandwidth_idx) >= len(sxx):
+            break
+        total_power += sxx[i-bandwidth_idx: i+bandwidth_idx+1].mean()
+    return total_power/(n-1)
+
+def get_total_pitch_powers_adjusted(sxx, freqs, freq_range=(90, 3000), idx_step=1, n_harmonics=5):
+    idx_start = np.where(freqs < freq_range[0])[-1][-1]
+    idx_end = np.where(freqs < freq_range[-1])[-1][-1] 
+
+    freq_of_power = []
+    powers = []
+    for freq_idx in range(idx_start, idx_end, idx_step):
+        power_ = total_pitch_power_adjusted(sxx, freq_idx, bandwidth_idx=1, n_harmonics=n_harmonics)
+        powers.append(power_)
+        freq_of_power.append(freqs[freq_idx])
+    
+    return freq_of_power, powers
 
 
+def total_pitch_power_adjusted(sxx, fundamental_idx, bandwidth_idx=1, n_harmonics=5):
+    """
+    TODO: index out of range at high frequency
+    """
+    nth_harmonics = np.arange(1, n_harmonics+1, dtype=int)
+    total_power = 0
+
+    approx_half_cycle_size = fundamental_idx//2
+    #bandwidth_idx = fundamental_idx//6
+
+    n = 1
+    for n in nth_harmonics:
+        i = n*fundamental_idx
+
+        if (i+approx_half_cycle_size) >= len(sxx):
+            break
+        
+        cycle_mean = sxx[i-approx_half_cycle_size: i+approx_half_cycle_size+1].mean()
+        total_power += sxx[i-bandwidth_idx: i+bandwidth_idx+1].mean() - cycle_mean
+    return total_power/(n-1)
 
 
 @deprecated("use total_pitch_power")
