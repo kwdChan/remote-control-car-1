@@ -14,18 +14,21 @@ class Camera:
 
         if ret:
             self.logger.log_time('time')
-            self.logger.log('img', img)
+            self.logger.save_video_frame(img)
             return img
         else:
             return None
+
     @staticmethod
     def main(camera_idx, logger: Logger): 
+        logger.setup_video_saver()
 
         component = Camera(camera_idx, logger)
         
         while True:
             logger.increment_idx()
-            img = component.step()
+            component.step()
+            
             
     @staticmethod
     def start(camera_idx, logger_set: LoggerSet, **kwargs):
