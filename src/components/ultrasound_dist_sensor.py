@@ -18,13 +18,14 @@ class DistanceSensorUrgentStop:
         return distance < self.threshold
 
     @staticmethod
-    def main(pin_trigger:int, pin_echo:int, threshold: float, logger_set: LoggerSet, sender: Connection, **kwargs):
+    def main(pin_trigger:int, pin_echo:int, threshold: float, logger_set: LoggerSet, name:str, sender: Connection, **kwargs):
 
-        logger = logger_set.get_logger(**kwargs)
+        logger = logger_set.get_logger(name=name, **kwargs)
         device = DistanceSensorUrgentStop(pin_trigger, pin_echo, threshold, logger)
 
         while True:
-            sender.send(device.step())
+            logger.increment_idx()
+            sender.send((device.step(), name, logger.idx))
             time.sleep(0.1)
 
     @staticmethod
