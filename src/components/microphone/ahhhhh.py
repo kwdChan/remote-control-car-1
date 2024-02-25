@@ -47,7 +47,7 @@ class AhhhhhWheelController:
         self.is_valid_hist = self.is_valid_hist[1:] + [this_step_valid]
 
         # use np.nanmedian(self.pitch_hist) so that it is more resilient to rare nan
-        balance = angle2proportion(np.nanmedian(self.pitch_hist), 220, 120)
+        balance = angle2proportion_v2(np.nanmedian(self.pitch_hist), 220, 120, 0.3)
 
         self.logger.log_time("AhhhhhWheelController")
         self.logger.log('speed_or_invalid', speed)
@@ -138,6 +138,7 @@ class AhhhhhDetector:
 def angle_deg_between(a1, a2):
     return min((a1-a2)%360, (a2-a1)%360)
 
+@deprecated("use angle2proportion_v2")
 def angle2proportion(angle_deg, centre, scale_oneside):
     """
     scale_oneside: (0, 180]
@@ -157,6 +158,28 @@ def angle2proportion(angle_deg, centre, scale_oneside):
     proportion = min(proportion, 1)
     proportion = max(proportion, 0)
     return proportion
+
+
+def angle2proportion_v2(angle_deg, centre, pitch_scale_oneside, balance_scale_oneside):
+    """
+    scale_oneside: (0, 180]
+
+    mapped an angle to a number 
+        centre + scale_oneside -> 1
+        centre + 0             -> 0.5
+        centre - scale_oneside -> 0
+    """
+    angle_centred = (angle_deg - centre) % 360
+    if angle_centred > 180:
+        angle_centred = angle_centred - 360
+
+    # angle_centred: (-180, 180]
+
+    proportion = angle_centred/(pitch_scale_oneside/balance_scale_oneside) + 0.5
+    proportion = min(proportion, 0.5+balance_scale_oneside)
+    proportion = max(proportion, 0.5-balance_scale_oneside)
+    return proportion
+
 
 def rolling_mean(arr, kernel=np.ones(3)/3): 
     return np.correlate(arr, kernel, mode='same')
