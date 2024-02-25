@@ -4,7 +4,8 @@ import datetime, time
 import numpy as np 
 import pandas as pd
 import pickle
-import cv2
+from .video_data import VideoSaver
+from tqdm import tqdm
 
 class LoggerSet:
     def __init__(self, path='../log/temp', overwrite_ok=False):
@@ -28,9 +29,21 @@ class LoggerSet:
             if d.is_dir():
                 result.append(Logger(self.path, name=d.stem, overwrite_ok=True))
         return result
-            
-    
 
+    def export_to_parquet(self, **kwargs):
+        failed = {}
+        for logger in tqdm(self.get_all_logger()):
+            try: 
+                df = logger.load_as_df(**kwargs)
+                df.to_parquet(self.path/f"{logger.name}.parquet")
+            except Exception as e:
+                failed[logger.name] = e
+
+        if len(failed):
+            print('some failed')
+        return failed
+            
+            
 class Logger:
 
     def __init__(self, path: Union[Path, str] ='../log/temp', name='unnamed', save_interval:float=30, overwrite_ok=False):
@@ -100,7 +113,6 @@ class Logger:
         self.log('fidx', fidx)
         self.log('monotonic', monotonic)
         
-
     def load(self, min_idx=0, max_idx=999):
         data = []
         
@@ -120,57 +132,3 @@ class Logger:
         result = pd.DataFrame(result)
         return result.pivot(index='idx', columns=['key']).droplevel(0, 1)
 
-                    
-class VideoSaver:
-
-    DEFAULT_FOURCC = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore
-    def __init__(self, path, save_interval=450, fourcc=DEFAULT_FOURCC, framerate=24, resolution=(640, 480)):
-
-        path = Path(path)
-        path.mkdir(exist_ok=True)
-
-        self.path = path
-        self.save_interval = save_interval
-        self.resolution = resolution
-        self.framerate = framerate
-        self.fourcc = fourcc
-
-        # states 
-        self.video_idx = -1
-        self.frame_idx = -1
-        self.video_writer: cv2.VideoWriter
-
-        # start 
-        self.new_video()
-
-    def new_video(self):
-
-        self.video_idx += 1
-
-        current_video_path = self.path / f"{self.video_idx}.mp4"
-        self.video_writer = cv2.VideoWriter(str(current_video_path), self.fourcc, self.framerate, self.resolution  )
-        self.frame_idx = -1
-        
-
-
-
-    def save_frame(self, arr:np.ndarray) -> Tuple[int, int, float]:
-        timer = time.monotonic()
-        self.frame_idx +=1 
-        try: 
-            self.video_writer.write(arr)
-        except Exception as e:
-            self.video_writer.release()
-            raise e
-
-        to_return = (self.video_idx, self.frame_idx, timer)
-
-        if self.frame_idx >= self.save_interval: 
-            self.video_writer.release()
-            self.new_video()
-
-        return to_return
-    
-
-
-        
