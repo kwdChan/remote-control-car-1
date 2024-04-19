@@ -1,3 +1,4 @@
+from pickle import NONE
 from typing import List, Dict, Literal, Union, Tuple, Any
 import datetime, time
 from typing_extensions import deprecated 
@@ -7,10 +8,11 @@ import RPi.GPIO as GPIO
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from data_collection.data_collection import LoggerSet, Logger
+from dataclasses import dataclass
 
-def setup_pwm(pin, freq=300) -> GPIO.PWM:
-    GPIO.setup(pin, GPIO.OUT)
-    return GPIO.PWM(pin, freq) 
+def setup_pwm(pin, freq=300) -> GPIO.PWM: #type: ignore
+    GPIO.setup(pin, GPIO.OUT) #type: ignore
+    return GPIO.PWM(pin, freq)  #type: ignore
 
 class TwoWheels:
     def __init__(self, ch_left, ch_right, logger:Logger):
@@ -44,12 +46,20 @@ class TwoWheels:
             result = input_con.recv()
         return result
 
+
     @staticmethod
-    def main(left_pin:int, right_pin:int, logger: Logger, input_con: Connection):
+    def main(left_pin:int, right_pin:int, logger: Logger, input_con: Connection, dir_pins: Union[Tuple[int, int], None] = None):
+        """
         
-        GPIO.setmode(GPIO.BOARD)
+        """
         ch_left = setup_pwm(left_pin,freq=300)
         ch_right = setup_pwm(right_pin,freq=300)
+
+        if not dir_pins is None:
+            GPIO.setup(dir_pins[0], GPIO.OUT) #type: ignore
+            GPIO.setup(dir_pins[1], GPIO.OUT) #type: ignore
+            GPIO.output(dir_pins[0], 0) #type: ignore
+            GPIO.output(dir_pins[1], 0) #type: ignore
 
         component = TwoWheels(ch_left, ch_right, logger)
 
@@ -66,14 +76,14 @@ class TwoWheels:
             time.sleep(0.1)
 
     @staticmethod
-    def start(left_pin, right_pin, logger_set: LoggerSet, **kwargs):
+    def start(left_pin, right_pin, logger_set: LoggerSet, dir_pins: Union[Tuple[int, int], None] = None, **kwargs):
         """
         using GPIO.BOARD pin
         """
 
         logger = logger_set.get_logger(**kwargs)
         receiver, sender = Pipe(False)        
-        process = Process(target=TwoWheels.main, args=(left_pin, right_pin, logger, receiver))
+        process = Process(target=TwoWheels.main, args=(left_pin, right_pin, logger, receiver, dir_pins))
         process.start()
         return process, sender
 

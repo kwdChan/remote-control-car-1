@@ -4,3 +4,4 @@ log
 .virtual_documents
 __pycache__
 .ipynb_checkpoints
+.vscode

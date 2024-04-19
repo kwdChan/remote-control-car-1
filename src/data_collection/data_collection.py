@@ -6,9 +6,9 @@ import pandas as pd
 import pickle
 from .video_data import VideoSaver
 from tqdm import tqdm
-
+from copy import copy
 class LoggerSet:
-    def __init__(self, path='../log/temp', overwrite_ok=False):
+    def __init__(self, path='../log/temp', overwrite_ok=False, override_save_interval=None):
         path_obj = Path(path) 
         
         # if path_obj.exists():
@@ -16,13 +16,24 @@ class LoggerSet:
     
         path_obj.mkdir(parents=True, exist_ok=True)
 
-        
+        self.override_save_interval = override_save_interval
         self.path = path_obj
         self.overwrite_ok = overwrite_ok
 
     def get_logger(self, name, save_interval=30):
+        if not self.override_save_interval is None:
+            save_interval = self.override_save_interval
+
         return Logger(self.path, name, save_interval=save_interval, overwrite_ok=self.overwrite_ok)
 
+    def load_logger(self, name):
+        match = [ l for l in self.get_all_logger() if l.name == name ]
+        if match:
+            return match[0]
+        else:
+            raise KeyError 
+        
+    
     def get_all_logger(self):
         result = []
         for d in self.path.iterdir():
@@ -90,7 +101,7 @@ class Logger:
         ideally all values of the same key should have the same structure
         """
 
-        new_record = dict(idx=self.idx, key=key, value=value)
+        new_record = dict(idx=self.idx, key=key, value=copy(value))
         self.records.append(new_record)
 
         if (time.monotonic() - self.last_saved) >= self.save_interval:

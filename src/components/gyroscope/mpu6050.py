@@ -74,6 +74,12 @@ class MPU6050:
         # Wake up the MPU-6050 since it starts in sleep mode
         self.bus.write_byte_data(self.address, self.PWR_MGMT_1, 0x00)
 
+
+        # MODIFIED: remember the ranges so there's no need to query for every sample 
+        self.accel_range = None
+        self.gyro_range = None 
+
+
     # I2C communication methods
 
     def read_i2c_word(self, register):
@@ -114,11 +120,17 @@ class MPU6050:
         accel_range -- the range to set the accelerometer to. Using a
         pre-defined range is advised.
         """
+        # MODIFIED: reset the memory 
+        self.accel_range = None
+
         # First change it to 0x00 to make sure we write the correct value later
         self.bus.write_byte_data(self.address, self.ACCEL_CONFIG, 0x00)
 
         # Write the new range to the ACCEL_CONFIG register
         self.bus.write_byte_data(self.address, self.ACCEL_CONFIG, accel_range)
+
+        # MODIFIED: confirm and remember the value
+        self.read_accel_range()
 
     def read_accel_range(self, raw = False):
         """Reads the range the accelerometer is set to.
@@ -128,7 +140,11 @@ class MPU6050:
         If raw is False, it will return an integer: -1, 2, 4, 8 or 16. When it
         returns -1 something went wrong.
         """
-        raw_data = self.bus.read_byte_data(self.address, self.ACCEL_CONFIG)
+        # MODIFIED: read the cached value if exist 
+        if self.accel_range is None: 
+            raw_data = self.bus.read_byte_data(self.address, self.ACCEL_CONFIG)
+        else: 
+            raw_data = self.accel_range
 
         if raw is True:
             return raw_data
@@ -144,7 +160,8 @@ class MPU6050:
             else:
                 return -1
 
-    def get_accel_data(self, g = False):
+
+    def get_accel_data(self, g = False, return_dict=True):
         """Gets and returns the X, Y and Z values from the accelerometer.
 
         If g is True, it will return the data in g
@@ -174,13 +191,20 @@ class MPU6050:
         y = y / accel_scale_modifier
         z = z / accel_scale_modifier
 
+        # MODIFIED: put into one return only 
         if g is True:
-            return {'x': x, 'y': y, 'z': z}
+            pass
         elif g is False:
-            x = x * self.GRAVITIY_MS2
-            y = y * self.GRAVITIY_MS2
-            z = z * self.GRAVITIY_MS2
+            x *= self.GRAVITIY_MS2
+            y *= self.GRAVITIY_MS2
+            z *= self.GRAVITIY_MS2
+            
+        # MODIFIED: added the option return tuple
+        if return_dict: 
             return {'x': x, 'y': y, 'z': z}
+        else: 
+            return x, y, z
+
 
     def set_gyro_range(self, gyro_range):
         """Sets the range of the gyroscope to range.
@@ -188,11 +212,17 @@ class MPU6050:
         gyro_range -- the range to set the gyroscope to. Using a pre-defined
         range is advised.
         """
+        # MODIFIED: reset the memory 
+        self.gyro_range = None
+
         # First change it to 0x00 to make sure we write the correct value later
         self.bus.write_byte_data(self.address, self.GYRO_CONFIG, 0x00)
 
         # Write the new range to the ACCEL_CONFIG register
         self.bus.write_byte_data(self.address, self.GYRO_CONFIG, gyro_range)
+
+        # MODIFIED: confirm and remember the value
+        self.read_gyro_range()
 
     def set_filter_range(self, filter_range=FILTER_BW_256):
         """Sets the low-pass bandpass filter frequency"""
@@ -209,7 +239,12 @@ class MPU6050:
         If raw is False, it will return 250, 500, 1000, 2000 or -1. If the
         returned value is equal to -1 something went wrong.
         """
-        raw_data = self.bus.read_byte_data(self.address, self.GYRO_CONFIG)
+
+        # MODIFIED: read the cached value if exist 
+        if self.gyro_range is None: 
+            raw_data = self.bus.read_byte_data(self.address, self.GYRO_CONFIG)
+        else:
+            raw_data = self.gyro_range
 
         if raw is True:
             return raw_data
@@ -225,15 +260,11 @@ class MPU6050:
             else:
                 return -1
 
-    def get_gyro_data(self):
+    def get_gyro_data(self, return_dict=True):
         """Gets and returns the X, Y and Z values from the gyroscope.
 
         Returns the read values in a dictionary.
         """
-
-        # MODIFIED:
-        # TODO: this function read the gyro range for every sample
-
         x = self.read_i2c_word(self.GYRO_XOUT0)
         y = self.read_i2c_word(self.GYRO_YOUT0)
         z = self.read_i2c_word(self.GYRO_ZOUT0)
@@ -257,7 +288,11 @@ class MPU6050:
         y = y / gyro_scale_modifier
         z = z / gyro_scale_modifier
 
-        return {'x': x, 'y': y, 'z': z}
+        # MODIFIED: added the option return tuple
+        if return_dict: 
+            return {'x': x, 'y': y, 'z': z}
+        else: 
+            return x, y, z
 
     def get_all_data(self):
         """Reads and returns all the available data."""

@@ -1,7 +1,9 @@
+from typing_extensions import deprecated
 import msgpack
 import datetime
 import numpy as np
 
+@deprecated('use parquet')
 def encoder(obj):
     if isinstance(obj, datetime.datetime):
         return {'__encoded_from': 'datetime.datetime', 'json-compatible': obj.strftime("%Y%m%dT%H:%M:%S.%f")}
@@ -12,6 +14,7 @@ def encoder(obj):
     else:
         return obj
 
+@deprecated('use parquet')
 def decoder(obj):
 
     if not '__encoded_from' in obj:
@@ -26,12 +29,13 @@ def decoder(obj):
     else:
         raise ValueError('unknown type')
 
-
+@deprecated('use parquet')
 def save_to_msgpack(data, path, encoder=encoder):
     packed_data = msgpack.packb(data, default = encoder)
     with open(path, 'wb') as file:
         file.write(packed_data) # type: ignore
-
+        
+@deprecated('use parquet')
 def load_from_msgpack(path, decoder=decoder):
 
     with open(path, 'rb') as file:
