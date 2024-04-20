@@ -6,26 +6,33 @@ from typing_extensions import List, overload, override
 from multiprocessing.sharedctypes import Synchronized as SharedValue
 from multiprocessing.sharedctypes import SynchronizedArray as SharedArray
 from multiprocessing import Value, Process
+
+from multiprocessing import Manager
+from multiprocessing.managers import BaseProxy, BaseManager
+import warnings
 import inspect
 from ctypes import c_long, c_double, c_bool, c_wchar_p
 
 from data_collection.data_collection import Logger
-def access(v: Union[SharedValue, SharedArray]):
-    return v[:] if isinstance(v, SharedArray) else v.value
 
-def assign(variable: Union[None, SharedValue, SharedArray], value):
+def assign(variable: Union[None, BaseProxy], value):
     if variable is None: 
         return 
-    if isinstance(variable, SharedArray):
-        variable[:] = value
+
+    elif hasattr(variable, "__setitem__"):
+        variable[:] = value #type: ignore
+
+    elif hasattr(variable, "value"):
+        variable.value = value #type: ignore
+
     else: 
-        variable.value  = value
+        raise NotImplementedError("no known value assignment method for this proxy")
 
 class Component: 
 
     logger: Logger
-    SHARED_VARIABLE_LIST = List[Union[None, SharedValue, SharedArray]]
-    SHARED_VARIABLE_LIST_NOT_NONE = List[Union[SharedValue, SharedArray]]
+    SHARED_VARIABLE_LIST_NONE_OKAY = List[Union[None, BaseProxy]]
+    SHARED_VARIABLE_LIST_NOT_NONE = List[BaseProxy]
 
     @abstractmethod
     def step(self) -> Any:
@@ -35,11 +42,8 @@ class Component:
     def entry(cls, *args, **kwargs):
         return cls(*args, **kwargs)
     
-
-
-
     @classmethod
-    def main(cls, interval, entry_args=(), entry_kwargs={}, shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], shared_outputs: SHARED_VARIABLE_LIST=[]):
+    def main(cls, interval, entry_args=(), entry_kwargs={}, shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]):
         """
         main loop: 
         object instantiate (through cls.entry) and then loop 
@@ -50,34 +54,39 @@ class Component:
         t_last = time.monotonic()
         while True: 
             now = time.monotonic()
-            if (now - t_last) >= interval: 
+
+            time_passed = now - t_last
+            time_past_due = time_passed - interval
+            if time_past_due >= 0: 
+                if time_past_due > interval/5:
+                    warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
                 t_last = now
                 obj.logger.increment_idx()
-                outputs = obj.step(*[access(v) for v in shared_inputs])
-            
+
+                outputs = obj.step(*[v._getvalue() for v in shared_inputs])
                 if outputs is None: 
                     outputs = ()
                 for idx, o in enumerate(outputs): 
-                    if not shared_outputs[idx] is None: 
-                        assign(shared_outputs[idx], o)
+                    assign(shared_outputs[idx], o)
             else: 
                 time.sleep(interval/50)
 
 
-    INFERRED_TYPES = {
-        int: (c_long, 0),
-        float: (c_double, 0),
-        #str: (c_wchar_p, ""),
-        bool: (c_bool, False)
-    }
-
+    # INFERRED_TYPES = {
+    #     int: (c_long, 0),
+    #     float: (c_double, 0),
+    #     #str: (c_wchar_p, ""),
+    #     bool: (c_bool, False)
+    # }
 
     @classmethod
-    def create_shared_outputs(cls) -> SHARED_VARIABLE_LIST:
+    def create_shared_outputs(cls, manager: BaseManager) -> SHARED_VARIABLE_LIST_NONE_OKAY:
         """
         override this method to set the ctypes and initial values for the shared values 
         use the type hint to infer by default 
-        """
+        """ 
+        raise NotImplementedError("This method needs to be overriden")
+
 
         step_return_types = inspect.signature(cls.step).return_annotation
         
@@ -97,12 +106,12 @@ class Component:
         return shared_outputs
 
     @classmethod
-    def create(cls, *main_args, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST, "function"]:
+    def create(cls, manager: BaseManager, *main_args, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST_NONE_OKAY, "function"]:
         """
         create the output and then 
         """
         
-        shared_outputs = cls.create_shared_outputs()
+        shared_outputs = cls.create_shared_outputs(manager)
 
         def starter(shared_inputs: List[SharedValue]=[]) -> Process:
             process = Process(
