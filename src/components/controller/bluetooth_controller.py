@@ -1,14 +1,68 @@
 
-from typing import TypeVar, Union
+from ctypes import c_double, c_ulong, c_wchar_p
+from typing import Optional, TypeVar, Union, List 
+from typing_extensions import deprecated
 import bluetooth
-from multiprocessing import Pipe, Process
+from multiprocessing import Array, Pipe, Process
 from multiprocessing.connection import Connection
+from multiprocessing.sharedctypes import Synchronized as SharedValue
 
+from components import Component
 from data_collection.data_collection import Logger, LoggerSet
 import numpy as np 
 from components.utils import receive_latest, send, receive_immediately
 import time
 
+class ServerForAppArduinoBlueControlV2(Component):
+
+
+    BUFFER_SIZE = 100
+    def __init__(self, logger: Logger):
+
+        server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+        server_sock.bind(("", bluetooth.PORT_ANY))
+        print("Waiting for connections")
+        server_sock.listen(1)  # type: ignore 
+
+        client_sock, client_info = server_sock.accept()
+        print("Accepted connection from", client_info)
+
+        self.client_sock = client_sock
+        self.server_sock = server_sock
+        self.logger = logger
+
+        # states
+        self.commands = ['NA']*self.BUFFER_SIZE
+        self.command_times = [time.monotonic()]*self.BUFFER_SIZE
+        
+    def step(self):
+        data = str(self.client_sock.recv(1024).decode()) # type: ignore
+
+
+        now = time.monotonic()
+        self.commands = self.commands[1:] + ['data']
+        self.command_times = self.command_times[1:] + [now]
+
+        return self.commands, self.command_times
+
+    @classmethod
+    def create_shared_outputs(cls) -> Component.SHARED_VARIABLE_LIST:
+        return [Array(c_wchar_p, cls.BUFFER_SIZE), Array(c_double, cls.BUFFER_SIZE)]
+
+    @classmethod
+    def entry(cls, loggerset: Optional[LoggerSet]=None, name='', *args, **kwargs):
+        assert loggerset
+        logger = loggerset.get_logger(name)
+        return cls(logger)
+
+
+    def __del__(self):
+        self.server_sock.close() # type: ignore 
+
+
+
+
+@deprecated('use V2')
 class ServerForAppArduinoBlueControl:
     def __init__(self, logger: Logger):
 
@@ -58,6 +112,8 @@ class ServerForAppArduinoBlueControl:
     def __del__(self):
         self.server_sock.close() # type: ignore 
 
+
+@deprecated('use V2')
 class BlueToothCarControl:
     def __init__(self, logger: Logger):
         self.logger = logger

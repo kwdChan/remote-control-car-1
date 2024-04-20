@@ -213,5 +213,5 @@ def find_pitch_with_fft(sxx, freqs, freq_range=(90, 600)):
     return freq_pitch[bidx][argmax], sxx_pitch[bidx][argmax]
 
 
-def freq_to_pitch(freq):
-    return (np.log2(freq) % 1) * 360
+def freq_to_pitch(freq) -> Union[float, np.ndarray]:
+    return (np.log2(freq) % 1) * 360 # type: ignore 

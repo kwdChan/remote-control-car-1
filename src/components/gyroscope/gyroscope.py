@@ -1,4 +1,4 @@
-from typing import Any, Union, cast, overload
+from typing import Any, Union, cast, Optional
 from typing_extensions import deprecated, override
 from . import mpu6050
 from data_collection.data_collection import Logger, LoggerSet
@@ -87,6 +87,7 @@ class OrientationTrackerV2(Component):
         gyro_bias = np.array(gyros).mean(0)
         return initial_q, gyro_bias
 
+@deprecated("Move to OrientationTrackerV2")
 class OrientationTracker:
     def __init__(self, device: mpu6050.MPU6050, logger: Logger):
         self.device = device
@@ -144,6 +145,95 @@ class OrientationTracker:
         return initial_q, gyro_bias
 
 
+class AngularSpeedControlV2(Component):
+    def __init__(self, ori_tracker: OrientationTrackerV2, logger: Logger):
+        self.ori_tracker = ori_tracker
+        self.ori0 = Quaternion(ori_tracker.initial_ori)
+        self.logger = logger
+
+        # states
+        self.target_angle = 0 
+        self.last_t = time.monotonic()
+        self.last_angle = 0
+        self.current_proportion = 0.5
+
+    @override
+    def step(
+        self, 
+        degree_per_second=0, 
+        speed=0
+    ) -> Tuple[float, float]:
+        ori = Quaternion(self.ori_tracker.step())
+
+        this_t = time.monotonic() 
+        time_passed = this_t - self.last_t        
+        
+        target_angle = self.target_angle + degree_per_second*time_passed
+
+        axis, angle = Quaternion(ori * self.ori0.conj).to_axang()
+        if axis[-1]<0:
+            angle *= -1
+        angle = cast (float, np.rad2deg(angle)) # type:ignore
+
+
+        angle_diff = (angle-target_angle)
+        angle_diff = (angle_diff + 180) % 360 - 180
+
+        # different to the given degree_per_second
+        angular_velocity = (angle - self.last_angle)
+        angular_velocity = (angular_velocity + 180) % 360 - 180
+        angular_velocity = angular_velocity/time_passed
+
+        
+        k1=5/360
+        k2=1/360
+        #new_proportion = self.current_proportion + (k1*angle_diff + k2*angular_velocity)
+        new_proportion = 0.5 + (k1*angle_diff + k2*(angular_velocity-degree_per_second))
+
+        left, right, warn = speed_proportion_control(new_proportion, speed)
+
+
+        self.last_t = this_t
+        self.target_angle = target_angle
+        self.last_angle = angle 
+        self.current_proportion = new_proportion
+
+        self.logger.log_time("time_AngularSpeedControl")
+        self.logger.log("angle_diff", angle_diff)
+        self.logger.log("axis", axis)
+        self.logger.log("angle", angle)
+        self.logger.log("target_angle", target_angle)
+        self.logger.log("degree_per_second", degree_per_second)
+        self.logger.log("speed", speed)
+        self.logger.log("new_proportion", new_proportion)
+        self.logger.log("left", left)
+        self.logger.log("right", right)
+        self.logger.log("warn", warn)
+        self.logger.log("angular_velocity", angular_velocity)
+
+        return left, right
+
+    @override
+    @classmethod
+    def entry(
+        cls, 
+        logger_set:Optional[LoggerSet]=None, 
+        logger_name='', 
+        i2c_address=0x68, 
+        bus_num=1,
+        *args, **kwargs
+    ):
+        assert isinstance(logger_set, LoggerSet)
+
+        device = mpu6050.MPU6050(i2c_address, bus_num)
+        logger = logger_set.get_logger(logger_name, **kwargs)
+
+        tracker = OrientationTrackerV2(device, logger)
+        control = cls(tracker, logger)
+        return control
+
+
+@deprecated("Move to AngularSpeedControlV2")
 class AngularSpeedControl:
     def __init__(self, ori_tracker: OrientationTracker, logger: Logger):
         self.ori_tracker = ori_tracker
