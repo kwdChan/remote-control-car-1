@@ -1,5 +1,5 @@
-from typing import Any, Union, cast
-from typing_extensions import deprecated
+from typing import Any, Union, cast, overload
+from typing_extensions import deprecated, override
 from . import mpu6050
 from data_collection.data_collection import Logger, LoggerSet
 import time
@@ -12,6 +12,8 @@ import numpy as np
 from ahrs.filters import Madgwick
 from ahrs import Quaternion
 
+from components import Component
+
 def from_axang(axis: np.ndarray, angle) -> np.ndarray:
 
     def normalise(arr):
@@ -22,6 +24,68 @@ def from_axang(axis: np.ndarray, angle) -> np.ndarray:
     cosine = np.cos(angle/2) # type: ignore
 
     return np.r_[cosine, sine*axis]
+
+class OrientationTrackerV2(Component):
+    def __init__(self, device: mpu6050.MPU6050, logger: Logger):
+        self.device = device
+        self.madgwick = Madgwick()
+        self.logger = logger
+
+        self.initial_ori, self.gyro_bias = self.get_initial_orientation_and_gyro_bias(device)
+
+
+        logger.log("initial_ori", self.initial_ori)
+        logger.log("gyro_bias", self.gyro_bias)
+
+        # states
+        self.t_last = time.monotonic()
+        self.last_ori = self.initial_ori
+    
+    @override
+    def step(self) -> Tuple[float, float, float, float]:
+        new_time = time.monotonic()
+        self.madgwick.Dt =  new_time - self.t_last
+        self.t_last = new_time
+
+        acc = self.device.get_accel_data(g=True, return_dict=False)
+        gyr = (self.device.get_gyro_data(return_dict=False)-self.gyro_bias)/180*np.pi
+        
+        new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
+        self.logger.log_time("time_OrientationTracker")
+        self.logger.log('q', new_ori)
+        
+        self.last_ori = new_ori
+
+
+        return new_ori[0], new_ori[1], new_ori[2], new_ori[3]  #, gyr, acc
+
+
+        new_ori = Quaternion(new_ori)
+        
+        return new_ori#, gyr, acc
+    
+    @classmethod
+    def get_initial_orientation_and_gyro_bias(cls, device, sec=1) -> Tuple[np.ndarray, np.ndarray]:
+
+        def calculate(static_acc):
+            ref = np.array([0, 0, 1])
+
+            angle = np.arccos(np.dot(static_acc, ref)) # type:ignore 
+            axis = np.cross(static_acc, ref)
+
+            return from_axang(axis, angle)
+
+        _t = time.monotonic()
+        accs = []
+        gyros = []
+        while (time.monotonic() - _t) < sec:
+            accs.append(device.get_accel_data(g=True, return_dict=False))
+            gyros.append(device.get_gyro_data(return_dict=False))
+
+        acc_mean = np.array(accs).mean(0)
+        initial_q = calculate(acc_mean)
+        gyro_bias = np.array(gyros).mean(0)
+        return initial_q, gyro_bias
 
 class OrientationTracker:
     def __init__(self, device: mpu6050.MPU6050, logger: Logger):
