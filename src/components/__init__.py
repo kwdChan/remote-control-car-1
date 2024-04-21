@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import time
 from types import FunctionType
-from typing import Callable, Tuple, get_origin, get_args, Union, Any
+from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any
 from typing_extensions import List, overload, override
 from multiprocessing.sharedctypes import Synchronized as SharedValue
 from multiprocessing.sharedctypes import SynchronizedArray as SharedArray
@@ -12,7 +12,7 @@ from multiprocessing.managers import BaseProxy, BaseManager
 import warnings
 import inspect
 from ctypes import c_long, c_double, c_bool, c_wchar_p
-
+import numpy as np
 from data_collection.data_collection import Logger
 
 def assign(variable: Union[None, BaseProxy], value):
@@ -39,17 +39,17 @@ class Component:
         return ()
 
     @classmethod
-    def entry(cls, *args, **kwargs):
-        return cls(*args, **kwargs)
+    def entry(cls, **kwargs):
+        return cls(**kwargs)
     
     @classmethod
-    def main(cls, interval, entry_args=(), entry_kwargs={}, shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]):
+    def main(cls, interval, past_due_warning_sec=np.inf, entry_kwargs={}, shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]):
         """
         main loop: 
         object instantiate (through cls.entry) and then loop 
         """
         
-        obj = cls.entry(*entry_args, **entry_kwargs)
+        obj = cls.entry(**entry_kwargs)
 
         t_last = time.monotonic()
         while True: 
@@ -58,7 +58,7 @@ class Component:
             time_passed = now - t_last
             time_past_due = time_passed - interval
             if time_past_due >= 0: 
-                if time_past_due > interval/5:
+                if time_past_due > past_due_warning_sec:
                     warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
                 t_last = now
                 obj.logger.increment_idx()
@@ -106,7 +106,7 @@ class Component:
         return shared_outputs
 
     @classmethod
-    def create(cls, manager: BaseManager, *main_args, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST_NONE_OKAY, "function"]:
+    def create(cls, manager: BaseManager, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST_NONE_OKAY, "function"]:
         """
         create the output and then 
         """
@@ -116,7 +116,6 @@ class Component:
         def starter(shared_inputs: List[SharedValue]=[]) -> Process:
             process = Process(
                 target=cls.main, 
-                args=main_args, 
                 kwargs=dict(
                     shared_inputs=shared_inputs,
                     shared_outputs=shared_outputs, 
