@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import time
 from types import FunctionType
-from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any
+from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any, Optional, Dict
 from typing_extensions import List, overload, override
 from multiprocessing.sharedctypes import Synchronized as SharedValue
 from multiprocessing.sharedctypes import SynchronizedArray as SharedArray
@@ -15,53 +15,60 @@ from ctypes import c_long, c_double, c_bool, c_wchar_p
 import numpy as np
 from data_collection.data_collection import Logger
 
-def assign(variable: Union[None, BaseProxy], value):
-    if variable is None: 
-        return 
-
-    elif hasattr(variable, "__setitem__"):
-        variable[:] = value #type: ignore
-
-    elif hasattr(variable, "value"):
-        variable.value = value #type: ignore
-
-    else: 
-        raise NotImplementedError("no known value assignment method for this proxy")
-
-def access(variable: BaseProxy):
-    if hasattr(variable, "value"):
-        return variable.value #type: ignore
-    else: 
-        return variable._getvalue()
 
 
 
 class Component: 
 
     logger: Logger
-    SHARED_VARIABLE_LIST_NONE_OKAY = List[Union[None, BaseProxy]]
-    SHARED_VARIABLE_LIST_NOT_NONE = List[BaseProxy]
+    shared_values: List[BaseProxy]
+
+    @staticmethod
+    def assign(variable: Union[None, BaseProxy], value):
+        if variable is None: 
+            return 
+
+        elif hasattr(variable, "__setitem__"):
+            variable[:] = value #type: ignore
+
+        elif hasattr(variable, "value"):
+            variable.value = value #type: ignore
+
+        else: 
+            raise NotImplementedError("no known value assignment method for this proxy")
+    
+    @staticmethod
+    def access(variable: BaseProxy):
+
+        if hasattr(variable, "value"):
+            return variable.value #type: ignore
+        else: 
+            return variable._getvalue()
+
 
     @abstractmethod
     def step(self) -> Any:
         return ()
 
+
     @classmethod
     def entry(cls, **kwargs):
         return cls(**kwargs)
+
     
     @classmethod
     def main(
         cls, interval, past_due_warning_sec=np.inf, entry_kwargs={}, 
-        shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], 
-        shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]
+        shared_inputs: List[BaseProxy]=[], 
+        shared_outputs: List[Optional[BaseProxy]]=[],
+        shared_values: Dict[str, BaseProxy]={}
     ):
         """
         main loop: 
         object instantiate (through cls.entry) and then loop 
         """
         
-        obj = cls.entry(**entry_kwargs)
+        obj = cls.entry(**entry_kwargs, **shared_values)
 
         t_last = time.monotonic()
         while True: 
@@ -75,11 +82,11 @@ class Component:
                 t_last = now
                 obj.logger.increment_idx()
 
-                outputs = obj.step(*[access(v) for v in shared_inputs])
+                outputs = obj.step(*[cls.access(v) for v in shared_inputs])
                 if outputs is None: 
                     outputs = ()
                 for idx, o in enumerate(outputs): 
-                    assign(shared_outputs[idx], o)
+                    cls.assign(shared_outputs[idx], o)
             else: 
                 time.sleep(interval/50)
 
@@ -92,7 +99,7 @@ class Component:
     # }
 
     @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> SHARED_VARIABLE_LIST_NONE_OKAY:
+    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
         """
         override this method to set the ctypes and initial values for the shared values 
         use the type hint to infer by default 
@@ -119,22 +126,34 @@ class Component:
         return shared_outputs
 
     @classmethod
-    def create(cls, manager: BaseManager, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST_NONE_OKAY, "function"]:
+    def create_shared_values(cls, manager: BaseManager) -> Dict[str, BaseProxy]:
+        """
+        these proxies are passed to the entry of the receiver AND SELF
+        **through the shared_values parameter of the receiver's main**
+        """
+        return {}
+
+    @classmethod
+    def create(cls, manager: BaseManager, **main_kwargs) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"]:
         """
         create the output and a function that takes the input proxy to start the process
 
-        main_kwargs: arguments to main except the proxies
+        main_kwargs: arguments to main except the proxies (
+            i.e. shared_inputs, shared_outputs, shared_values
+        )
         
         """
         
         shared_outputs = cls.create_shared_outputs(manager)
-
-        def starter(shared_inputs: List[SharedValue]=[]) -> Process:
+        shared_values = cls.create_shared_values(manager)
+        
+        def starter(shared_inputs: List[BaseProxy]=[], shared_values: Dict[str, BaseProxy]={}) -> Process:
             process = Process(
                 target=cls.main, 
                 kwargs=dict(
                     shared_inputs=shared_inputs,
                     shared_outputs=shared_outputs, 
+                    shared_values=shared_values,
                     **main_kwargs
                     )
                 )
@@ -142,7 +161,7 @@ class Component:
 
             return process
 
-        return shared_outputs, starter
+        return shared_outputs, shared_values, starter
 
 
         

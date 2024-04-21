@@ -90,7 +90,7 @@ class OrientationTrackerV2(Component):
         return initial_q, gyro_bias
 
     @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
         
         assert isinstance(manager, SyncManager)
         w = manager.Value(c_double, 0)
@@ -246,7 +246,7 @@ class AngularSpeedControlV2(Component):
         return control
 
     @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
         
         assert isinstance(manager, SyncManager)
         left = manager.Value(c_double, 0)
