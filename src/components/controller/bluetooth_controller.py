@@ -1,9 +1,10 @@
 
 from ctypes import c_double, c_ulong, c_wchar_p
-from typing import Optional, TypeVar, Union, List 
+from multiprocessing.managers import BaseManager, SyncManager
+from typing import Optional, TypeVar, Union, List, cast 
 from typing_extensions import deprecated
 import bluetooth
-from multiprocessing import Array, Pipe, Process
+from multiprocessing import Array, Manager, Pipe, Process
 from multiprocessing.connection import Connection
 from multiprocessing.sharedctypes import Synchronized as SharedValue
 
@@ -32,22 +33,22 @@ class ServerForAppArduinoBlueControlV2(Component):
         self.logger = logger
 
         # states
-        self.commands = ['NA']*self.BUFFER_SIZE
+        self.commands = ['']*self.BUFFER_SIZE
         self.command_times = [time.monotonic()]*self.BUFFER_SIZE
         
     def step(self):
         data = str(self.client_sock.recv(1024).decode()) # type: ignore
 
-
         now = time.monotonic()
-        self.commands = self.commands[1:] + ['data']
+        self.commands = self.commands[1:] + [data]
         self.command_times = self.command_times[1:] + [now]
 
         return self.commands, self.command_times
 
     @classmethod
-    def create_shared_outputs(cls) -> Component.SHARED_VARIABLE_LIST:
-        return [Array(c_wchar_p, cls.BUFFER_SIZE), Array(c_double, cls.BUFFER_SIZE)]
+    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+        assert isinstance(manager, SyncManager)        
+        return [manager.list(), manager.list()]
 
     @classmethod
     def entry(cls, loggerset: Optional[LoggerSet]=None, name='', *args, **kwargs):
@@ -58,8 +59,6 @@ class ServerForAppArduinoBlueControlV2(Component):
 
     def __del__(self):
         self.server_sock.close() # type: ignore 
-
-
 
 
 @deprecated('use V2')
