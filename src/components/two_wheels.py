@@ -31,6 +31,7 @@ class TwoWheelsV2(Component):
     ) -> None:
         
         if (left is None) and (right is None):
+            print('nan')
             return 
         
         self.ch_left.ChangeDutyCycle(left)
@@ -47,24 +48,29 @@ class TwoWheelsV2(Component):
         left_pin:int=0, 
         right_pin:int=0, 
         logger_set: Optional[LoggerSet]=None, 
-        dir_pins: Union[Tuple[int, int], None] = None,
+        dir_pins: Optional[Tuple[int, int]] = None,
         name = '', 
-        *args,
         **kwargs
     ):
         """
         
         """
+        assert name, "name cannot be left empty"
+        assert left_pin, "left_pin cannot be left empty"
+        assert right_pin, "right_pin cannot be left empty"
+        assert logger_set, "logger_set cannot be left empty"
+        assert dir_pins, "dir_pins cannot be left empty"
+
         ch_left = setup_pwm(left_pin, freq=300)
         ch_right = setup_pwm(right_pin, freq=300)
+        ch_left.ChangeDutyCycle(0)
+        ch_right.ChangeDutyCycle(0)
 
-        if not dir_pins is None:
-            GPIO.setup(dir_pins[0], GPIO.OUT) #type: ignore
-            GPIO.setup(dir_pins[1], GPIO.OUT) #type: ignore
-            GPIO.output(dir_pins[0], 0) #type: ignore
-            GPIO.output(dir_pins[1], 0) #type: ignore
+        GPIO.setup(dir_pins[0], GPIO.OUT) #type: ignore
+        GPIO.setup(dir_pins[1], GPIO.OUT) #type: ignore
+        GPIO.output(dir_pins[0], 0) #type: ignore
+        GPIO.output(dir_pins[1], 0) #type: ignore
 
-        assert isinstance(logger_set, LoggerSet)
         logger = logger_set.get_logger(name, **kwargs)
 
         return cls(ch_left, ch_right, logger)

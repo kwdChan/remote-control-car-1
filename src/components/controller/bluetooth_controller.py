@@ -51,7 +51,7 @@ class ServerForAppArduinoBlueControlV2(Component):
         return [manager.list(), manager.list()]
 
     @classmethod
-    def entry(cls, loggerset: Optional[LoggerSet]=None, name='', *args, **kwargs):
+    def entry(cls, loggerset: Optional[LoggerSet]=None, name='', **kwargs):
         assert loggerset
         logger = loggerset.get_logger(name)
         return cls(logger)

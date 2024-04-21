@@ -1,3 +1,4 @@
+from multiprocessing.managers import BaseManager
 from typing_extensions import deprecated
 from components import Component
 import cv2
@@ -43,17 +44,15 @@ class PicameraV2(Component):
         return img
 
     @classmethod
-    def create_shared_outputs(cls) -> Component.SHARED_VARIABLE_LIST:
+    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
         return [None]
 
     
     @classmethod
     def entry(
-        cls, 
-        resolution=0, framerate=0, config_overrides:Any={}, 
+        cls, resolution=0, framerate=0, config_overrides:Any={}, 
         logger_set: Optional[LoggerSet]=None, 
-        *args, **kwargs
-
+        **kwargs
         ):
 
         assert isinstance(logger_set, LoggerSet)

@@ -1,3 +1,4 @@
+from multiprocessing.managers import SyncManager
 from typing import Any, Union, cast, Optional
 from typing_extensions import deprecated, override
 from . import mpu6050
@@ -6,8 +7,10 @@ import time
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from ..utils import receive_latest, send, ReceiveLatest
-from typing import Tuple, List
+from multiprocessing.managers import BaseProxy, BaseManager
 
+from typing import Tuple, List
+from ctypes import c_double
 import numpy as np
 from ahrs.filters import Madgwick
 from ahrs import Quaternion
@@ -41,7 +44,6 @@ class OrientationTrackerV2(Component):
         self.t_last = time.monotonic()
         self.last_ori = self.initial_ori
     
-    @override
     def step(self) -> Tuple[float, float, float, float]:
         new_time = time.monotonic()
         self.madgwick.Dt =  new_time - self.t_last
@@ -86,6 +88,16 @@ class OrientationTrackerV2(Component):
         initial_q = calculate(acc_mean)
         gyro_bias = np.array(gyros).mean(0)
         return initial_q, gyro_bias
+
+    @classmethod
+    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+        
+        assert isinstance(manager, SyncManager)
+        w = manager.Value(c_double, 0)
+        x = manager.Value(c_double, 0)
+        y = manager.Value(c_double, 0)
+        z = manager.Value(c_double, 0)
+        return [w,x,y,z]
 
 @deprecated("Move to OrientationTrackerV2")
 class OrientationTracker:
@@ -212,25 +224,35 @@ class AngularSpeedControlV2(Component):
         self.logger.log("angular_velocity", angular_velocity)
 
         return left, right
-
+        
     @override
     @classmethod
     def entry(
         cls, 
         logger_set:Optional[LoggerSet]=None, 
-        logger_name='', 
+        name='', 
         i2c_address=0x68, 
         bus_num=1,
-        *args, **kwargs
+        **kwargs
     ):
-        assert isinstance(logger_set, LoggerSet)
-
+        assert name, "name cannot be left empty"
+        assert logger_set, "logger_set cannot be left empty"
+        
         device = mpu6050.MPU6050(i2c_address, bus_num)
-        logger = logger_set.get_logger(logger_name, **kwargs)
+        logger = logger_set.get_logger(name, **kwargs)
 
         tracker = OrientationTrackerV2(device, logger)
         control = cls(tracker, logger)
         return control
+
+    @classmethod
+    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+        
+        assert isinstance(manager, SyncManager)
+        left = manager.Value(c_double, 0)
+        right = manager.Value(c_double, 0)
+
+        return [left, right]
 
 
 @deprecated("Move to AngularSpeedControlV2")

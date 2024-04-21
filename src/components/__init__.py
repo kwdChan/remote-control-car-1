@@ -28,6 +28,14 @@ def assign(variable: Union[None, BaseProxy], value):
     else: 
         raise NotImplementedError("no known value assignment method for this proxy")
 
+def access(variable: BaseProxy):
+    if hasattr(variable, "value"):
+        return variable.value #type: ignore
+    else: 
+        return variable._getvalue()
+
+
+
 class Component: 
 
     logger: Logger
@@ -43,7 +51,11 @@ class Component:
         return cls(**kwargs)
     
     @classmethod
-    def main(cls, interval, past_due_warning_sec=np.inf, entry_kwargs={}, shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]):
+    def main(
+        cls, interval, past_due_warning_sec=np.inf, entry_kwargs={}, 
+        shared_inputs: SHARED_VARIABLE_LIST_NOT_NONE=[], 
+        shared_outputs: SHARED_VARIABLE_LIST_NONE_OKAY=[]
+    ):
         """
         main loop: 
         object instantiate (through cls.entry) and then loop 
@@ -63,7 +75,7 @@ class Component:
                 t_last = now
                 obj.logger.increment_idx()
 
-                outputs = obj.step(*[v._getvalue() for v in shared_inputs])
+                outputs = obj.step(*[access(v) for v in shared_inputs])
                 if outputs is None: 
                     outputs = ()
                 for idx, o in enumerate(outputs): 
@@ -85,6 +97,7 @@ class Component:
         override this method to set the ctypes and initial values for the shared values 
         use the type hint to infer by default 
         """ 
+        return [None]
         raise NotImplementedError("This method needs to be overriden")
 
 
@@ -108,7 +121,10 @@ class Component:
     @classmethod
     def create(cls, manager: BaseManager, **main_kwargs) -> Tuple[SHARED_VARIABLE_LIST_NONE_OKAY, "function"]:
         """
-        create the output and then 
+        create the output and a function that takes the input proxy to start the process
+
+        main_kwargs: arguments to main except the proxies
+        
         """
         
         shared_outputs = cls.create_shared_outputs(manager)
