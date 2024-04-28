@@ -1,8 +1,7 @@
 from abc import abstractmethod
 import time
 from types import FunctionType
-from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any, Optional, Dict
-from typing_extensions import List, overload, override
+from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any, Optional, Dict, List
 from multiprocessing.sharedctypes import Synchronized as SharedValue
 from multiprocessing.sharedctypes import SynchronizedArray as SharedArray
 from multiprocessing import Value, Process
