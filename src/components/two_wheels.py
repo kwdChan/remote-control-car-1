@@ -30,9 +30,12 @@ class TwoWheelsV2(Component):
         right: Optional[float]=None
     ) -> None:
         
-        if (left is None) and (right is None):
+        if (left is None) or (right is None):
             print('nan')
             return 
+
+        left = min(100, max(0, left))
+        right = min(100, max(0, right))
         
         self.ch_left.ChangeDutyCycle(left)
         self.ch_right.ChangeDutyCycle(right)
