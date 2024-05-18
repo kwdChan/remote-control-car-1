@@ -80,13 +80,15 @@ class Component:
                 if time_past_due > past_due_warning_sec:
                     warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
                 t_last = now
-                obj.logger.increment_idx()
+                
 
                 outputs = obj.step(*[cls.access(v) for v in shared_inputs])
                 if outputs is None: 
                     outputs = ()
                 for idx, o in enumerate(outputs): 
                     cls.assign(shared_outputs[idx], o)
+
+                obj.logger.increment_idx() 
 
                 # for idx, o in enumerate(shared_outputs): 
                 #     cls.assign(shared_outputs[idx], o)
