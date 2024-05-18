@@ -28,11 +28,11 @@ class TwoWheelsV2(Component):
         self, 
         left: Optional[float]=None, 
         right: Optional[float]=None
-    ) -> None:
+    ) -> Tuple:
         
         if (left is None) or (right is None):
             print('nan')
-            return 
+            return ()
 
         left = min(100, max(0, left))
         right = min(100, max(0, right))
@@ -43,6 +43,7 @@ class TwoWheelsV2(Component):
         self.logger.log_time('time')
         self.logger.log('left', left)
         self.logger.log('right', right)
+        return ()
 
     @override
     @classmethod

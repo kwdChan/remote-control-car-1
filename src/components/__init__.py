@@ -46,7 +46,8 @@ class Component:
 
 
     @abstractmethod
-    def step(self) -> Any:
+    def step(self) -> Tuple:
+        # have to return tuple because the main will iterate through the output variables 
         return ()
 
 
@@ -86,6 +87,11 @@ class Component:
                     outputs = ()
                 for idx, o in enumerate(outputs): 
                     cls.assign(shared_outputs[idx], o)
+
+                # for idx, o in enumerate(shared_outputs): 
+                #     cls.assign(shared_outputs[idx], o)
+
+
             else: 
                 time.sleep(interval/50)
 

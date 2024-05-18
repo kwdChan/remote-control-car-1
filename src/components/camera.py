@@ -3,11 +3,11 @@ from typing_extensions import deprecated
 from components import Component
 import cv2
 import numpy as np
-from typing import List, Dict, Literal, Union, Optional, Any
+from typing import List, Dict, Literal, Tuple, Union, Optional, Any
 from data_collection.data_collection import LoggerSet, Logger
 from multiprocessing import Process
-from multiprocessing.sharedctypes import Synchronized as SharedValue
 
+from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
 
 import sys
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -23,6 +23,8 @@ class PicameraV2(Component):
         """
         picam2 = Picamera2()
 
+        logger.setup_video_saver(resolution=resolution, framerate=framerate)
+
         presets = dict( main={"size":resolution, "format": "RGB888"}, queue=False, controls={"FrameDurationLimits": (int(1e6/framerate), int(1e6/framerate))}, transform=Transform(hflip=True, vflip=True), buffer_count=1)
         for k, v in config_overrides.items():
             presets[k] = v
@@ -36,18 +38,17 @@ class PicameraV2(Component):
         self.cap = picam2
         self.logger = logger
 
-    def step(self) -> Union[None, np.ndarray]:
+    def step(self) -> Tuple[Union[None, np.ndarray]]:
         img = self.cap.capture_array("main")[:, :, :3] # type: ignore 
 
         self.logger.log_time('time')
         self.logger.save_video_frame(img)
-        return img
+        return (img, )
 
     @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> Component.SHARED_VARIABLE_LIST_NONE_OKAY:
+    def create_shared_outputs(cls, manager:BaseManager)->List[Optional[BaseProxy]]:
         return [None]
 
-    
     @classmethod
     def entry(
         cls, resolution=0, framerate=0, config_overrides:Any={}, 
@@ -59,6 +60,8 @@ class PicameraV2(Component):
         logger = logger_set.get_logger(**kwargs)
 
         return cls(resolution, framerate, config_overrides, logger)
+
+
 
 
 @deprecated('use V2')
