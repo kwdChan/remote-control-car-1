@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import List, Dict, Literal, Tuple, Union, cast
+from typing import List, Dict, Literal, Tuple, Union, cast, Iterator
+
 import datetime, time 
 import numpy as np 
 import pandas as pd
@@ -37,9 +38,6 @@ class VideoSaver:
         self.video_writer = cv2.VideoWriter(str(current_video_path), self.fourcc, self.framerate, self.resolution  )
         self.frame_idx = -1
         
-
-
-
     def save_frame(self, arr:np.ndarray) -> Tuple[int, int, float]:
         timer = time.monotonic()
         self.frame_idx +=1 
@@ -56,6 +54,32 @@ class VideoSaver:
             self.new_video()
 
         return to_return
+
+
+def get_frame_iterator(path) -> Iterator[Tuple[int, np.ndarray]]:
+
+    frame_idx = 0 
+    video_idx = 0
+    path = Path(path)
+
+    video_exists = True 
+
+    while video_exists: 
+
+        path = path / f"{video_idx}.mp4"
+        video_exists = path.exists()
+        while True:            
+            cap = cv2.VideoCapture(str(path))
+            ret, data = cap.read()
+            if not ret: 
+                break
+            else: 
+                yield frame_idx, data  
+                frame_idx += 1
+
+        video_idx += 1 
+
+            
     
 
 
