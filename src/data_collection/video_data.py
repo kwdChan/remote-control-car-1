@@ -56,20 +56,21 @@ class VideoSaver:
         return to_return
 
 
-def get_frame_iterator(path) -> Iterator[Tuple[int, np.ndarray]]:
+def get_frame_iterator(folderpath) -> Iterator[Tuple[int, np.ndarray]]:
 
     frame_idx = 0 
     video_idx = 0
-    path = Path(path)
+    folderpath = Path(folderpath)
 
-    video_exists = True 
 
-    while video_exists: 
+    while True: 
 
-        path = path / f"{video_idx}.mp4"
-        video_exists = path.exists()
+        path = folderpath / f"{video_idx}.mp4"
+        if not path.exists(): 
+            break
+
+        cap = cv2.VideoCapture(str(path))
         while True:            
-            cap = cv2.VideoCapture(str(path))
             ret, data = cap.read()
             if not ret: 
                 break

@@ -28,7 +28,6 @@ def start_bluetooth_server(manager: SyncManager):
     return [data], p
     
     
-    
 
 
 
