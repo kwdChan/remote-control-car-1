@@ -8,21 +8,127 @@ from multiprocessing import Value, Process
 
 from multiprocessing import Manager
 from multiprocessing.managers import BaseProxy, BaseManager
+from typing_extensions import deprecated
 import warnings
 import inspect
 from ctypes import c_long, c_double, c_bool, c_wchar_p
 import numpy as np
 from data_collection.data_collection import Logger
+from typing import Type
 
 
 
 
+
+def default_loop( 
+    instantiater, 
+    init_kwargs, 
+    proxy_assigner, 
+    proxy_reader,
+    interval,
+    past_due_warning_sec=np.inf, 
+    input_proxies=[], 
+    output_proxies=[],
+    other_proxies:Dict={},     
+):
+    obj = instantiater(**init_kwargs, **other_proxies)
+
+    t_last = time.monotonic()
+    while True: 
+        now = time.monotonic()
+
+        time_passed = now - t_last
+        time_past_due = time_passed - interval
+        if time_past_due >= 0: 
+            if time_past_due > past_due_warning_sec:
+                warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
+            t_last = now
+            
+            outputs = obj.step(*[proxy_reader(v) for v in input_proxies])
+            if outputs is None: 
+                outputs = ()
+            for idx, o in enumerate(outputs): 
+                proxy_assigner(output_proxies[idx], o)
+
+            obj.logger.increment_idx() 
+
+        else: 
+            time.sleep(interval/50)
+
+def default_proxy_assigner(variable: Union[None, BaseProxy], value):
+    if variable is None: 
+        return 
+
+    elif hasattr(variable, "__setitem__"):
+        variable[:] = value #type: ignore
+
+    elif hasattr(variable, "value"):
+        variable.value = value #type: ignore
+
+    else: 
+        raise NotImplementedError("no known value assignment method for this proxy")
+
+def default_proxy_reader(variable: BaseProxy):
+
+    if hasattr(variable, "value"):
+        return variable.value #type: ignore
+    else: 
+        return variable._getvalue()
+
+
+def default_component_process_starter(
+    target_class: Type["Component"], 
+    init_kwargs: Dict, 
+    mainloop: Callable, 
+    main_kwargs: Dict, 
+    manager: BaseManager, 
+    proxy_assigner: Callable = default_proxy_assigner, 
+    proxy_reader: Callable = default_proxy_reader
+) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"] :
+    """
+    create the output and a function that takes the input proxy to start the process
+
+    main_kwargs: arguments to main except the proxies (
+        i.e. shared_inputs, shared_outputs, shared_values
+    )
+    
+    """
+    
+    output_proxies = target_class.create_shared_outputs(manager)
+    other_proxies = target_class.create_shared_values(manager)
+    
+    def starter(input_proxies: List[BaseProxy]=[], other_proxies: Dict[str, BaseProxy]={}) -> Process:
+        process = Process(
+            target=mainloop, 
+            kwargs=dict(
+                instantiater = target_class.entry,  #bad! 
+                init_kwargs = init_kwargs, 
+                proxy_assigner = proxy_assigner, 
+                proxy_reader = proxy_reader,
+                input_proxies = input_proxies, 
+                output_proxies = output_proxies,
+                other_proxies = other_proxies,   
+                **main_kwargs  
+                )
+            )
+        process.start()
+        return process
+
+    return output_proxies, other_proxies, starter
+
+
+
+
+
+
+# make this into an interface 
 class Component: 
 
     logger: Logger
     shared_values: List[BaseProxy]
-
+    
     @staticmethod
+    @deprecated('use create_component')
     def assign(variable: Union[None, BaseProxy], value):
         if variable is None: 
             return 
@@ -37,6 +143,7 @@ class Component:
             raise NotImplementedError("no known value assignment method for this proxy")
     
     @staticmethod
+    @deprecated('use create_component')
     def access(variable: BaseProxy):
 
         if hasattr(variable, "value"):
@@ -55,8 +162,28 @@ class Component:
     def entry(cls, **kwargs):
         return cls(**kwargs)
 
-    
     @classmethod
+    def create_component(
+        cls, 
+        init_kwargs: Dict, 
+        mainloop: Callable, 
+        main_kwargs: Dict, 
+        manager: BaseManager, 
+        proxy_assigner: Callable = default_proxy_assigner, 
+        proxy_reader: Callable = default_proxy_reader
+    ) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"]:
+        return default_component_process_starter(
+            cls, 
+            init_kwargs, 
+            mainloop, 
+            main_kwargs, 
+            manager, 
+            proxy_assigner, 
+            proxy_reader
+        )
+
+    @classmethod
+    @deprecated('use create_component')
     def main(
         cls, interval, past_due_warning_sec=np.inf, entry_kwargs={}, 
         shared_inputs: List[BaseProxy]=[], 
@@ -140,7 +267,9 @@ class Component:
         """
         return {}
 
+
     @classmethod
+    @deprecated('use create_component')
     def create(cls, manager: BaseManager, **main_kwargs) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"]:
         """
         create the output and a function that takes the input proxy to start the process
@@ -150,6 +279,7 @@ class Component:
         )
         
         """
+
         
         shared_outputs = cls.create_shared_outputs(manager)
         shared_values = cls.create_shared_values(manager)
