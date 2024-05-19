@@ -16,3 +16,5 @@ pyarrow
 tqdm
 smbus2
 arhs
+tensorflow
+tflite-runtime
