@@ -3,7 +3,8 @@ from typing_extensions import deprecated
 from components import Component
 import cv2
 import numpy as np
-from typing import List, Dict, Literal, Tuple, Union, Optional, Any
+import array 
+from typing import List, Dict, Literal, Tuple, Union, Optional, Any, Callable
 from data_collection.data_collection import LoggerSet, Logger
 from multiprocessing import Process
 
@@ -49,6 +50,7 @@ class PicameraV2(Component):
     def create_shared_outputs(cls, manager:BaseManager)->List[Optional[BaseProxy]]:
         return [None]
 
+
     @classmethod
     def entry(
         cls, resolution=0, framerate=0, config_overrides:Any={}, 
@@ -61,7 +63,66 @@ class PicameraV2(Component):
 
         return cls(resolution, framerate, config_overrides, logger)
 
+    @staticmethod
+    def proxy_assigner(proxy, value):
 
+        if isinstance(value, np.ndarray):
+            proxy[:] = array.array('B',value.ravel())
+        else:
+            raise NotImplementedError
+
+    @staticmethod
+    def get_proxy_reader(dimension):
+        def proxy_reader(proxy):
+            return np.array(proxy[:]).reshape(dimension)
+
+        return proxy_reader
+
+    @classmethod
+    def create_camera_component(
+        cls, 
+        init_kwargs: Dict, 
+        mainloop: Callable, 
+        main_kwargs: Dict, 
+        manager: BaseManager, 
+    ) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"]:
+
+        # messy! 
+        resolution = init_kwargs["resolution"]
+        n_channel = 3
+        array_dim = (*resolution, n_channel)
+
+        def get_ndarray_proxy(manager, array_dim):
+
+            # uint8: https://docs.python.org/3/library/array.html#module-array
+            array_length = np.prod(array_dim)
+
+            flatten_array = manager.Array('B', [0]*array_length)
+
+            return flatten_array
+
+        output_proxies = [get_ndarray_proxy(manager, array_dim)]
+
+        proxy_reader = cls.get_proxy_reader(array_dim)
+                
+        def starter(input_proxies: List[BaseProxy]=[], other_proxies: Dict[str, BaseProxy]={}) -> Process:
+            process = Process(
+                target=mainloop, 
+                kwargs=dict(
+                    instantiater = cls.entry,  #bad! 
+                    init_kwargs = init_kwargs, 
+                    proxy_assigner = cls.proxy_assigner, 
+                    proxy_reader = proxy_reader,
+                    input_proxies = input_proxies, 
+                    output_proxies = output_proxies,
+                    other_proxies = other_proxies,   
+                    **main_kwargs  
+                    )
+                )
+            process.start()
+            return process
+
+        return output_proxies, {}, starter
 
 
 @deprecated('use V2')
