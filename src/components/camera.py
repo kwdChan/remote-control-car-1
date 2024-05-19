@@ -1,6 +1,7 @@
 from multiprocessing.managers import BaseManager
 from typing_extensions import deprecated
-from components import Component
+from components import Component, default_proxy_reader
+
 import cv2
 import numpy as np
 import array 
@@ -73,6 +74,7 @@ class PicameraV2(Component):
 
     @staticmethod
     def get_proxy_reader(dimension):
+        # for the receiver
         def proxy_reader(proxy):
             return np.array(proxy[:]).reshape(dimension)
 
@@ -85,7 +87,7 @@ class PicameraV2(Component):
         mainloop: Callable, 
         main_kwargs: Dict, 
         manager: BaseManager, 
-    ) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"]:
+    ) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function", "function"]:
 
         # messy! 
         resolution = init_kwargs["resolution"]
@@ -112,7 +114,7 @@ class PicameraV2(Component):
                     instantiater = cls.entry,  #bad! 
                     init_kwargs = init_kwargs, 
                     proxy_assigner = cls.proxy_assigner, 
-                    proxy_reader = proxy_reader,
+                    proxy_reader = default_proxy_reader,
                     input_proxies = input_proxies, 
                     output_proxies = output_proxies,
                     other_proxies = other_proxies,   
@@ -122,7 +124,7 @@ class PicameraV2(Component):
             process.start()
             return process
 
-        return output_proxies, {}, starter
+        return output_proxies, {}, starter, proxy_reader
 
 
 @deprecated('use V2')
