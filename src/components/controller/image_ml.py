@@ -3,7 +3,7 @@ from components import Component, default_proxy_reader
 from pathlib import Path
 import numpy as np 
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
-
+import time
 import tensorflow as tf
 import tensorflow.keras as keras # type: ignore 
 from data_collection.data_collection import LoggerSet, Logger
@@ -11,7 +11,7 @@ from data_collection.data_collection import LoggerSet, Logger
 class ImageMLController(Component):
 
     def __init__(self, model_path: Path, logger: Logger):
-        model = model = keras.models.load_model(model_path) 
+        model = keras.models.load_model(model_path) 
 
         self.model_path = model_path
         self.model = model
@@ -19,10 +19,12 @@ class ImageMLController(Component):
 
     
     def step(self, arr:Optional[np.ndarray] = None): 
+        t0 = time.monotonic()
+        self.logger.log_time('before')
         assert not (arr is None)
-
         out = self.model(arr[None, :])[0]
-
+        t1 = time.monotonic()
+        self.logger.log('timelapsed', t1-t0)
         return out[0], out[1]#, out[2], out[3]
 
     @classmethod
