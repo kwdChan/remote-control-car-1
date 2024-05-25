@@ -7,6 +7,8 @@ import pickle
 from .video_data import VideoSaver
 from tqdm import tqdm
 from copy import copy
+
+import signal, sys, atexit
 class LoggerSet:
     def __init__(self, path='../log/temp', overwrite_ok=False, override_save_interval=None):
         path_obj = Path(path) 
@@ -70,6 +72,10 @@ class Logger:
             assert overwrite_ok
         path_obj.mkdir(parents=True, exist_ok=overwrite_ok)
 
+        signal.signal(signal.SIGINT, self.__signal_handler)
+        signal.signal(signal.SIGTERM, self.__signal_handler)
+        atexit.register(self.save)
+
 
         self.path = path_obj
         self.save_interval = save_interval
@@ -81,6 +87,16 @@ class Logger:
         self.chuck_number = 0
         self.idx = 0
         self.last_saved = time.monotonic()
+
+    def __signal_handler(self, signum, frame):
+        
+        self.save()
+
+        if signum == signal.SIGTERM: 
+            sys.exit(0)
+        else:
+            print('handled SIGINT')
+        
 
     def __repr__(self):
         return f"Logger: {self.name}"
@@ -108,6 +124,7 @@ class Logger:
             self.save()
 
     def save(self):
+        print(f'saving: {self.name}')
         
         with open(self.path/f"{self.chuck_number}.pkl", "wb") as fp:
             pickle.dump(self.records, fp, pickle.HIGHEST_PROTOCOL)

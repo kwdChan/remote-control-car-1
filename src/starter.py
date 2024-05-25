@@ -1,5 +1,5 @@
 from multiprocessing import Process
-import subprocess, sys, time, datetime, atexit
+import subprocess, sys, time, datetime, atexit, signal
 
 LOG_PATH = '/home/kawa/projects/car1/log/'
 def start():
@@ -9,10 +9,13 @@ def start():
 
 PROCESS = start()
 
-
-@atexit.register
-def terminate():
+def on_exit(signum=None, frame=None):
     PROCESS.terminate()
+    sys.exit(0)
+
+atexit.register(PROCESS.terminate)
+signal.signal(signal.SIGTERM, on_exit)
+
 
 def main(): 
     global PROCESS

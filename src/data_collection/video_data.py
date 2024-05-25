@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pickle
 import cv2
-
+import sys, atexit, signal
                     
 class VideoSaver:
 
@@ -22,6 +22,11 @@ class VideoSaver:
         self.framerate = framerate
         self.fourcc = fourcc
 
+        atexit.register(self.video_writer.release)
+        signal.signal(signal.SIGTERM, self.__signal_handler)
+        signal.signal(signal.SIGINT, self.__signal_handler)
+
+
         # states 
         self.video_idx = -1
         self.frame_idx = -1
@@ -29,6 +34,9 @@ class VideoSaver:
 
         # start 
         self.new_video()
+
+    def __signal_handler(self, signum, frame):
+        self.video_writer.release()
 
     def new_video(self):
 

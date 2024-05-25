@@ -10,7 +10,7 @@ from data_collection.data_collection import LoggerSet
 from multiprocessing import Manager, Process
 import time
 from components import default_loop_v2, default_component_process_starter_v2
-import atexit
+import atexit, signal
 
 import RPi.GPIO as GPIO 
 GPIO.setmode(GPIO.BOARD) # type: ignore
@@ -79,27 +79,36 @@ bt = bt_starter(bt_ser_out)
 
 ALL_PROCESSES = [bt_ser, w, imu, cam, bt]
 
-def health_check(processes: List[Process], interval=1, fail_cbs=[], ok_cbs=[]):
+def health_check(processes: List[Process], interval=1, fail_cbs=[]):
 
 
     while True: 
         time.sleep(interval)
         for p in processes:
             if p.is_alive():
-                for cb in ok_cbs:
-                    cb(p)
+                pass
             else: 
                 for cb in fail_cbs:
                     cb(p)
 
                 interval=1
 
-def on_termination(p: Optional[Process]):
+
+def on_fail(p):
+    print('failed: ')
     print(p)
-    print('failed')
+    sys.exit(1)
+
+def on_exit():
     for prc in ALL_PROCESSES:
         prc.terminate()
     sys.exit(1)
-atexit.register(on_termination, None)
 
-health_check(ALL_PROCESSES, fail_cbs=[on_termination])
+atexit.register(on_exit)
+
+def on_termination(signum, frame):
+    on_exit()
+
+signal.signal(signal.SIGTERM, on_termination)
+
+health_check(ALL_PROCESSES, fail_cbs=[on_fail])
