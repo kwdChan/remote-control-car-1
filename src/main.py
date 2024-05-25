@@ -1,6 +1,6 @@
 
 
-from typing import List
+from typing import List, Optional
 from components.controller.bluetooth_controller import BlueToothCarControlSPP
 from components.controller.bluetooth_SPP_server import start_bluetooth_server_v2
 from components.gyroscope.gyroscope import AngularSpeedControlV2
@@ -10,6 +10,7 @@ from data_collection.data_collection import LoggerSet
 from multiprocessing import Manager, Process
 import time
 from components import default_loop_v2, default_component_process_starter_v2
+import atexit
 
 import RPi.GPIO as GPIO 
 GPIO.setmode(GPIO.BOARD) # type: ignore
@@ -93,14 +94,12 @@ def health_check(processes: List[Process], interval=1, fail_cbs=[], ok_cbs=[]):
 
                 interval=1
 
-def on_fail(p):
+def on_termination(p: Optional[Process]):
     print(p)
-    print('fail')
-    for p in ALL_PROCESSES:
-        p.terminate()
+    print('failed')
+    for prc in ALL_PROCESSES:
+        prc.terminate()
     sys.exit(1)
+atexit.register(on_termination, None)
 
-
-health_check(ALL_PROCESSES, fail_cbs=[on_fail])
-
-
+health_check(ALL_PROCESSES, fail_cbs=[on_termination])

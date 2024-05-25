@@ -1,15 +1,25 @@
-import subprocess, sys, time, datetime
+from multiprocessing import Process
+import subprocess, sys, time, datetime, atexit
 
-LOG_PATH = './log/'
+LOG_PATH = '/home/kawa/projects/car1/log/'
+def start():
+    return subprocess.Popen([sys.executable, '/home/kawa/projects/car1/src/main.py', LOG_PATH+str(datetime.datetime.now())])
+
+
+
+PROCESS = start()
+
+
+@atexit.register
+def terminate():
+    PROCESS.terminate()
+
 def main(): 
-    def start():
-        return subprocess.Popen([sys.executable, 'src/main.py', LOG_PATH+str(datetime.datetime.now())])
-    
-    p = start()
+    global PROCESS
     while True: 
-        if not p.poll(): 
+        if not PROCESS.poll(): 
             time.sleep(1)
         else:
-            p = start()
+            PROCESS = start()
 
 main()
