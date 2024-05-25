@@ -82,7 +82,7 @@ def default_component_process_starter_v2(
     main_kwargs: Dict, 
     manager: BaseManager, 
     shared_outputs_kwargs: Dict = {}
-) -> Tuple[List[Callable], "function"] :
+) -> Tuple[List[Callable], Callable] :
     """
     create the output and a function that takes the input proxy to start the process
 
@@ -179,7 +179,7 @@ def default_component_process_starter(
     manager: BaseManager, 
     proxy_assigner: Callable = default_proxy_assigner, 
     proxy_reader: Callable = default_proxy_reader
-) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], "function"] :
+) -> Tuple[List[Optional[BaseProxy]], Dict[str, BaseProxy], Callable] :
     """
     create the output and a function that takes the input proxy to start the process
 
