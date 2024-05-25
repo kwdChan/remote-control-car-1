@@ -7,7 +7,7 @@ from multiprocessing.sharedctypes import SynchronizedArray as SharedArray
 from multiprocessing import Value, Process
 
 from multiprocessing import Manager
-from multiprocessing.managers import BaseProxy, BaseManager
+from multiprocessing.managers import BaseProxy, BaseManager, SyncManager
 from typing_extensions import deprecated
 import warnings
 import inspect
@@ -15,8 +15,100 @@ from ctypes import c_long, c_double, c_bool, c_wchar_p
 import numpy as np
 from data_collection.data_collection import Logger
 from typing import Type
+import array
 
 
+def default_loop_v2( 
+    instantiater, 
+    init_kwargs, 
+    interval,
+    past_due_warning_sec=np.inf, 
+    input_readers:List[Callable] = [], 
+    output_assigners:List[Callable] = [],
+    other_io:Dict[str, Callable] = {},     
+):
+    obj = instantiater(**init_kwargs, **other_io)
+
+    t_last = time.monotonic()
+    while True: 
+        now = time.monotonic()
+
+        time_passed = now - t_last
+        time_past_due = time_passed - interval
+        if time_past_due >= 0: 
+            if time_past_due > past_due_warning_sec:
+                warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
+            t_last = now
+            
+            outputs = obj.step(*[f() for f in input_readers])
+            if outputs is None: 
+                outputs = ()
+            for idx, o in enumerate(outputs): 
+                output_assigners[idx](o)
+
+            obj.logger.increment_idx() 
+
+        else: 
+            time.sleep(interval/50)
+
+def shared_value(manager: SyncManager, typecode: Any, default_value:Any=0) -> Tuple[Callable, Callable]:
+    proxy = manager.Value(typecode, default_value)
+    def reader():
+        return proxy.value
+
+    def assigner(value):
+        proxy.value=value
+
+    return reader, assigner
+
+def shared_np_array(manager: SyncManager, typecode: Any, default_value: np.ndarray) -> Tuple[Callable, Callable]:
+
+    flatten_proxy = manager.Array(typecode, default_value.ravel().tolist())
+    dim = default_value.shape
+
+    def assigner(value: np.ndarray):
+        flatten_proxy[:] = array.array(typecode, value.ravel()) # type: ignore
+
+    def reader():
+        return np.array(flatten_proxy[:]).reshape(dim)
+
+    return reader, assigner
+
+
+def default_component_process_starter_v2(
+    target_class: Type["Component"], 
+    init_kwargs: Dict, 
+    mainloop: Callable, 
+    main_kwargs: Dict, 
+    manager: BaseManager, 
+) -> Tuple[List[Callable], "function"] :
+    """
+    create the output and a function that takes the input proxy to start the process
+
+    main_kwargs: arguments to main except the proxies (
+        i.e. shared_inputs, shared_outputs, shared_values
+    )
+    
+    """
+    
+    output_readers, output_assigners = target_class.create_shared_outputs_rw(manager)
+    
+    def starter(input_readers: List[BaseProxy]=[]) -> Process:
+        process = Process(
+            target=mainloop, 
+            kwargs=dict(
+                instantiater = target_class.entry,  #bad! 
+                init_kwargs = init_kwargs, 
+
+                input_readers= input_readers, 
+                output_assigners = output_assigners,
+                **main_kwargs  
+                )
+            )
+        process.start()
+        return process
+
+    return output_readers, starter
 
 
 
@@ -54,6 +146,8 @@ def default_loop(
 
         else: 
             time.sleep(interval/50)
+
+
 
 def default_proxy_assigner(variable: Union[None, BaseProxy], value):
     if variable is None: 
@@ -231,6 +325,10 @@ class Component:
     #     #str: (c_wchar_p, ""),
     #     bool: (c_bool, False)
     # }
+
+    @classmethod
+    def create_shared_outputs_rw(cls, manager: BaseManager)-> Tuple[List[Callable], List[Callable]]:
+        return [], []
 
     @classmethod
     def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
