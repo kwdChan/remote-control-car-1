@@ -81,6 +81,7 @@ def default_component_process_starter_v2(
     mainloop: Callable, 
     main_kwargs: Dict, 
     manager: BaseManager, 
+    shared_outputs_kwargs: Dict = {}
 ) -> Tuple[List[Callable], "function"] :
     """
     create the output and a function that takes the input proxy to start the process
@@ -91,7 +92,7 @@ def default_component_process_starter_v2(
     
     """
     
-    output_readers, output_assigners = target_class.create_shared_outputs_rw(manager)
+    output_readers, output_assigners = target_class.create_shared_outputs_rw(manager, **shared_outputs_kwargs)
     
     def starter(input_readers: List[BaseProxy]=[]) -> Process:
         process = Process(

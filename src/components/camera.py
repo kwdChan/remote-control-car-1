@@ -1,6 +1,6 @@
 from multiprocessing.managers import BaseManager
 from typing_extensions import deprecated
-from components import Component, default_proxy_reader
+from components import Component, default_proxy_reader, shared_value, shared_np_array
 
 import cv2
 import numpy as np
@@ -51,6 +51,13 @@ class PicameraV2(Component):
     def create_shared_outputs(cls, manager:BaseManager)->List[Optional[BaseProxy]]:
         return [None]
 
+    @classmethod
+    def create_shared_outputs_rw(cls, manager:BaseManager, resolution: Tuple[int, int]=(0, 0)):
+        assert isinstance(manager, SyncManager)
+
+        r, w = shared_np_array(manager, 'B', np.zeros((*resolution, 3), dtype=np.uint8))
+        return [r], [w]
+
 
     @classmethod
     def entry(
@@ -79,6 +86,9 @@ class PicameraV2(Component):
             return np.array(proxy[:]).reshape(dimension)
 
         return proxy_reader
+
+
+    
 
     @classmethod
     def create_camera_component(
