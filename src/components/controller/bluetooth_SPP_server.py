@@ -8,6 +8,24 @@ from multiprocessing.managers import BaseProxy, BaseManager, DictProxy, SyncMana
 from multiprocessing import Process
 
 
+def start_bluetooth_server_v2(manager: SyncManager):
+
+    data = manager.dict()
+
+    def update(message:str):
+        "a -> a down, a0 = a up"
+        up = message[-1] != '0'
+        key = message if up else message[:-1]
+        data[key] = up
+
+    p = Process(
+        target=main,
+        args=(update, )
+    )
+    p.start()
+
+    return [lambda: data._getvalue()], p
+    
 
 def start_bluetooth_server(manager: SyncManager):
 

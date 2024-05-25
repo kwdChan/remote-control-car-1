@@ -1,5 +1,5 @@
 from typing import Optional, List
-from components import Component, default_proxy_reader
+from components import Component, default_proxy_reader, shared_value
 from pathlib import Path
 import numpy as np 
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
@@ -40,6 +40,18 @@ class ImageMLController(Component):
 
         return [out0, out1]
 
+    @classmethod
+    def create_shared_outputs_rw(cls, manager: BaseManager):
+        """
+        override this method to set the ctypes and initial values for the shared values 
+        use the type hint to infer by default 
+        """ 
+        
+        assert isinstance(manager, SyncManager)
+        out0r, out0w = shared_value(manager, 'd', 0)
+        out1r, out1w = shared_value(manager, 'd', 0)
+
+        return [out0r, out1r], [out0w, out1w], 
 
     @classmethod
     def entry(

@@ -1,17 +1,12 @@
 
-from ctypes import c_double, c_ulong, c_wchar_p
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
 from typing import Optional, Tuple, TypeVar, Union, List, cast, Dict
 from typing_extensions import deprecated
-import bluetooth
-from multiprocessing import Array, Manager, Pipe, Process
-from multiprocessing.connection import Connection
-from multiprocessing.sharedctypes import Synchronized as SharedValue
 
-from components import Component
+
+from components import Component, shared_value
 from data_collection.data_collection import Logger, LoggerSet
 import numpy as np 
-from components.utils import receive_latest, send, receive_immediately
 import time
 
 class BlueToothCarControlSPP(Component):
@@ -71,6 +66,17 @@ class BlueToothCarControlSPP(Component):
         angular_velocity = manager.Value('d', 0)
         speed = manager.Value('d', 0)
         return [angular_velocity, speed]
+
+
+    @classmethod
+    def create_shared_outputs_rw(cls, manager:BaseManager):
+        assert isinstance(manager, SyncManager)
+
+        angular_velocity_r, angular_velocity_w = shared_value(manager, 'd', 0)
+        speed_r, speed_w = shared_value(manager, 'd', 0)
+
+        return [angular_velocity_r, speed_r], [angular_velocity_w, speed_w]
+
 
     @classmethod
     def entry(
