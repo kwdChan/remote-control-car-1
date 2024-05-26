@@ -16,7 +16,7 @@ class BlueToothCarControlSPP(Component):
 
         # states
         self.speed = 50
-        self.angular_speed = 50
+        self.angular_speed = 100
 
     def step(self, data={})->Tuple[float, float]:
         self.logger.log_time()
