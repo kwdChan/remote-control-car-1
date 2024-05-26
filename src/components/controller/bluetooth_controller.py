@@ -38,7 +38,7 @@ class BlueToothCarControlSPP(Component):
 
         # states
         self.speed = 50
-        self.angular_speed = 180
+        self.angular_speed = 135
         self.boost = False
 
     def up_handler(self):
