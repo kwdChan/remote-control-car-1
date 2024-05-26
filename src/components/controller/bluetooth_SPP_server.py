@@ -1,3 +1,4 @@
+from logging import exception
 import os
 import dbus
 import dbus.service
@@ -6,7 +7,7 @@ from gi.repository import GLib # type: ignore
 from typing import Callable, Tuple, TypeVar, get_origin, get_args, Union, Any, Optional, Dict, List
 from multiprocessing.managers import BaseProxy, BaseManager, DictProxy, SyncManager
 from multiprocessing import Process
-
+import sys
 
 def start_bluetooth_server_v2(manager: SyncManager):
 
@@ -81,13 +82,22 @@ class Profile(dbus.service.Object):
                                   self.io_cb)
     # MODIFIED
     def io_cb(self, fd, conditions):
-        data = os.read(fd, 1024)
-        message = data.decode('utf-8')
+        try: 
+            data = os.read(fd, 1024)
+            message = data.decode('utf-8')
+        except:
+            sys.exit(1)
 
         for cb in self.callbacks:
             cb(message)
 
-        os.write(fd, bytes(list(reversed(data.rstrip()))) + b'\n')
+        try: 
+            os.write(fd, bytes(list(reversed(data.rstrip()))) + b'\n')
+        except OSError:
+            pass
+        except:
+            sys.exit(1)
+            
         return True
 
     # MODIFIED
