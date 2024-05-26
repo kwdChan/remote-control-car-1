@@ -22,7 +22,7 @@ class VideoSaver:
         self.framerate = framerate
         self.fourcc = fourcc
 
-        atexit.register(self.video_writer.release)
+        atexit.register(self.__release_on_exit)
         signal.signal(signal.SIGTERM, self.__signal_handler)
         signal.signal(signal.SIGINT, self.__signal_handler)
 
@@ -36,7 +36,13 @@ class VideoSaver:
         self.new_video()
 
     def __signal_handler(self, signum, frame):
-        self.video_writer.release()
+        if hasattr(self, "video_writer"):
+            self.video_writer.release()
+        sys.exit(1)
+    
+    def __release_on_exit(self):
+        if hasattr(self, "video_writer"):
+            self.video_writer.release()
 
     def new_video(self):
 
