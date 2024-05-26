@@ -9,50 +9,81 @@ from data_collection.data_collection import Logger, LoggerSet
 import numpy as np 
 import time
 
+
+def get_press_reaction(handler):
+
+    already_up = False
+    def check(isup, *arg, **kwargs):
+        nonlocal already_up
+        
+        if isup and not already_up:
+            already_up = True
+            handler(*arg, **kwargs)
+        if not isup:
+            already_up = False
+    return check 
+    
+
 class BlueToothCarControlSPP(Component):
     def __init__(self, logger: Logger):
         self.logger = logger
         
 
+
+        self.up_reactor = get_press_reaction(self.up_handler)
+        self.down_reactor = get_press_reaction(self.down_handler)
+        self.cir_reactor = get_press_reaction(self.cir_handler)
+        self.sq_reactor = get_press_reaction(self.sq_handler)
+
+
         # states
         self.speed = 50
-        self.angular_speed = 100
+        self.angular_speed = 180
+        self.boost = False
 
+    def up_handler(self):
+        self.speed += 5
+    
+    def down_handler(self):
+        self.speed -= 5
+    
+    def cir_handler(self):
+        self.angular_speed += 22.5
+    
+    def sq_handler(self):
+        self.angular_speed -= 22.5
+
+
+        
     def step(self, data={})->Tuple[float, float]:
         self.logger.log_time()
         self.logger.log('keys', data)
 
-        if (up:=data.get('up')) and up:
-            self.speed += 0.5
-            
+        self.up_reactor(data.get('up'))
+        self.down_reactor(data.get('down'))
+        self.cir_reactor(data.get('cir'))
+        self.sq_reactor(data.get('sq'))
 
-        if (down:=data.get('down')) and down:
-            self.speed -= 0.5
+        if data.get('cross'):
+            self.boost = True
 
-        if (cross:=data.get('cross')) and cross:
-            self.angular_speed = 0
-
-        if (cir:=data.get('cir')) and cir:
-            self.angular_speed += 0.5
-
-        if (sq:=data.get('sq')) and sq:
-            self.angular_speed -= 0.5
 
         angular_velocity_mul = 0
-        if (left:=data.get('left')) and left:
-
+        if data.get('left'):
+            self.boost = False
             angular_velocity_mul += 1
 
-        if (right:=data.get('right')) and right:
+        if data.get('right'):
+            self.boost = False
             angular_velocity_mul -= 1 
-
 
         angular_velocity = max(0, self.angular_speed)*angular_velocity_mul
 
-        if (go:=data.get('go')) and go:
-            speed = self.speed
+        if data.get('go'):
+            speed = 200 if self.boost else self.speed 
         else:
             speed = 0
+            self.boost = False
         
         
         self.logger.log('angular_velocity', angular_velocity)

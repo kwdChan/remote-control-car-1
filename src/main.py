@@ -73,7 +73,7 @@ bt_out, bt_starter = default_component_process_starter_v2(
 
 
 w = w_starter(imu_out)
-imu = imu_starter(bt_out)
+imu = imu_starter(bt_out+[lambda: bt_ser_out[0]().get('pause')])
 cam = cam_starter()
 bt = bt_starter(bt_ser_out)
 

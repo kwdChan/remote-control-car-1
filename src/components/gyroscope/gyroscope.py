@@ -172,20 +172,27 @@ class AngularSpeedControlV2(Component):
     def step(
         self, 
         degree_per_second=0, 
-        speed=0
+        speed=0,
+        reset_target_orientation=False, 
     ) -> Tuple[float, float]:
         ori = Quaternion(self.ori_tracker.step())
+        
 
         this_t = time.monotonic() 
         time_passed = this_t - self.last_t        
         
         target_angle = self.target_angle + degree_per_second*time_passed 
+        
 
         axis, angle = Quaternion(ori * self.ori0.conj).to_axang()
         if axis[-1]<0:
             angle *= -1
         angle = cast (float, np.rad2deg(angle)) # type:ignore
 
+        if reset_target_orientation:
+            print('reset')
+            self.target_angle = angle
+            target_angle = angle
 
         angle_diff = (angle-target_angle)
         angle_diff = (angle_diff + 180) % 360 - 180

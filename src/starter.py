@@ -21,7 +21,7 @@ def main():
     global PROCESS
     while True: 
         if not PROCESS.poll(): 
-            time.sleep(1)
+            time.sleep(2)
         else:
             PROCESS = start()
 
