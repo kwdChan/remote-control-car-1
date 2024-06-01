@@ -11,9 +11,10 @@ RPi.GPIO
 websockets
 aiohttp
 pybluez
-msgpack
 pyarrow
 tqdm
 smbus2
 arhs
 tensorflow
+spidev
+gpiozero
