@@ -193,6 +193,9 @@ class AngularSpeedControlV2(Component):
             print('reset')
             self.target_angle = angle
             target_angle = angle
+        if speed == 0:
+            self.target_angle = angle
+            target_angle = angle
 
         angle_diff = (angle-target_angle)
         angle_diff = (angle_diff + 180) % 360 - 180
