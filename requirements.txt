@@ -10,9 +10,10 @@ pvrecorder
 RPi.GPIO
 websockets
 aiohttp
-msgpack
+
 pyarrow
 tqdm
 arhs
 tensorflow
-smbus2
+spidev
+gpiozero
