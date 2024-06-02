@@ -17,6 +17,20 @@ from data_collection.data_collection import Logger
 from typing import Type
 import array
 
+T = TypeVar('T')
+def get_switch(v1: Callable[[], T], v2: Callable[[], T], use1: Callable[[], bool]) -> Callable[[], T]:
+
+    return lambda: v1() if use1() else v2()
+
+
+def get_switches(v1: List[Callable[[], T]], v2: List[Callable[[], T]], use1: Callable[[], bool]) -> List[Callable[[], T]]:
+    
+    values = []
+    for _v1, _v2 in zip(v1, v2):
+        values.append(
+            get_switch(_v1, _v2, use1 )
+        )
+    return values
 
 def default_loop_v2( 
     instantiater, 
