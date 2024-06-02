@@ -6,3 +6,6 @@ __pycache__
 .ipynb_checkpoints
 .vscode
 *.keras
+venv
+src/training/data
+src/training/logs
