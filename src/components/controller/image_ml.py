@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Callable, Optional, List, Any, Tuple
 from components import Component, default_proxy_reader, shared_value
 from pathlib import Path
 import numpy as np 
@@ -7,6 +7,65 @@ import time
 import tensorflow as tf
 import tensorflow.keras as keras # type: ignore 
 from data_collection.data_collection import LoggerSet, Logger
+
+class ImageMLControllerV2(Component):
+
+    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], logger: Logger):
+
+        self.model = func()
+        self.logger = logger
+
+    
+    def step(self, arr:Optional[np.ndarray] = None): 
+        t0 = time.monotonic()
+        self.logger.log_time('before')
+        assert not (arr is None)
+
+        v0, v1 = self.model(arr)
+        t1 = time.monotonic()
+        self.logger.log('timelapsed', t1-t0)
+        return v0, v1
+
+    @classmethod
+    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
+        """
+        override this method to set the ctypes and initial values for the shared values 
+        use the type hint to infer by default 
+        """ 
+        
+        assert isinstance(manager, SyncManager)
+        out0 = manager.Value('d', 0)
+        out1 = manager.Value('d', 0)
+
+        return [out0, out1]
+
+    @classmethod
+    def create_shared_outputs_rw(cls, manager: BaseManager):
+        """
+        override this method to set the ctypes and initial values for the shared values 
+        use the type hint to infer by default 
+        """ 
+        
+        assert isinstance(manager, SyncManager)
+        out0r, out0w = shared_value(manager, 'd', 0)
+        out1r, out1w = shared_value(manager, 'd', 0)
+
+        return [out0r, out1r], [out0w, out1w]
+
+    @classmethod
+    def entry(
+        cls, func:Any=None, 
+        logger_set: Optional[LoggerSet]=None, 
+        **kwargs
+        ):
+
+        assert isinstance(logger_set, LoggerSet)
+        logger = logger_set.get_logger(**kwargs)
+
+        return cls(func, logger)
+
+    
+
 
 class ImageMLController(Component):
 
