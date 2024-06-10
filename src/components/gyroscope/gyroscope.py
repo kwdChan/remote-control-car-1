@@ -54,6 +54,7 @@ class OrientationTrackerV2(Component):
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
         self.logger.log_time("time_OrientationTracker")
         self.logger.log('q', new_ori)
+        self.logger.log('linear_acc', acc)
         
         self.last_ori = new_ori
 
