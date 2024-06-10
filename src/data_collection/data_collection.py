@@ -50,7 +50,7 @@ class LoggerSet:
                 df = logger.load_as_df(**kwargs)
                 df.to_parquet(self.path/f"{logger.name}.parquet")
             except Exception as e:
-                failed[logger.name] = e
+                failed[logger.name] = (e, logger)
 
         if len(failed):
             print('some failed')

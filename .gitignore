@@ -9,3 +9,4 @@ __pycache__
 venv
 src/training/data
 src/training/logs
+tg_token.py
