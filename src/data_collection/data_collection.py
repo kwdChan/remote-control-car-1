@@ -10,7 +10,7 @@ from copy import copy
 
 import signal, sys, atexit
 class LoggerSet:
-    def __init__(self, path='../log/temp', overwrite_ok=False, override_save_interval=None):
+    def __init__(self, path:Union[str, Path]='../log/temp', overwrite_ok=False, override_save_interval=None):
         path_obj = Path(path) 
         
         # if path_obj.exists():
