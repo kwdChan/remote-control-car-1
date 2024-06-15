@@ -99,64 +99,6 @@ class OrientationTrackerV2(Component):
         z = manager.Value(c_double, 0)
         return [w,x,y,z]
 
-@deprecated("Move to OrientationTrackerV2")
-class OrientationTracker:
-    def __init__(self, device: mpu6050.MPU6050, logger: Logger):
-        self.device = device
-        self.madgwick = Madgwick()
-        self.logger = logger
-
-        self.initial_ori, self.gyro_bias = OrientationTracker.get_initial_orientation_and_gyro_bias(device)
-
-
-        logger.log("initial_ori", self.initial_ori)
-        logger.log("gyro_bias", self.gyro_bias)
-
-        # states
-        self.t_last = time.monotonic()
-        self.last_ori = self.initial_ori
-
-    def step(self):
-        new_time = time.monotonic()
-        self.madgwick.Dt =  new_time - self.t_last
-        self.t_last = new_time
-
-        acc = self.device.get_accel_data(g=True, return_dict=False)
-        gyr = (self.device.get_gyro_data(return_dict=False)-self.gyro_bias)/180*np.pi
-        
-        new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
-        self.logger.log_time("time_OrientationTracker")
-        self.logger.log('q', new_ori)
-        
-        self.last_ori = new_ori
-        new_ori = Quaternion(new_ori)
-        
-        return new_ori#, gyr, acc
-    
-    @staticmethod
-    def get_initial_orientation_and_gyro_bias(device, sec=1) -> Tuple[np.ndarray, np.ndarray]:
-
-        def calculate(static_acc):
-            ref = np.array([0, 0, 1])
-
-            angle = np.arccos(np.dot(static_acc, ref)) # type:ignore 
-            axis = np.cross(static_acc, ref)
-
-            return from_axang(axis, angle)
-
-        _t = time.monotonic()
-        accs = []
-        gyros = []
-        while (time.monotonic() - _t) < sec:
-            accs.append(device.get_accel_data(g=True, return_dict=False))
-            gyros.append(device.get_gyro_data(return_dict=False))
-
-        acc_mean = np.array(accs).mean(0)
-        initial_q = calculate(acc_mean)
-        gyro_bias = np.array(gyros).mean(0)
-        return initial_q, gyro_bias
-
-
 class AngularSpeedControlV2(Component):
     def __init__(self, ori_tracker: OrientationTrackerV2, logger: Logger):
         self.ori_tracker = ori_tracker

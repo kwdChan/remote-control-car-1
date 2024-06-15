@@ -1,5 +1,5 @@
 from typing import Callable, Optional, List, Any, Tuple
-from components import Component, default_proxy_reader, shared_value
+from components import Component, shared_value
 from pathlib import Path
 import numpy as np 
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
@@ -25,19 +25,6 @@ class ImageMLControllerV2(Component):
         t1 = time.monotonic()
         self.logger.log('timelapsed', t1-t0)
         return v0, v1
-
-    @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
-        """
-        override this method to set the ctypes and initial values for the shared values 
-        use the type hint to infer by default 
-        """ 
-        
-        assert isinstance(manager, SyncManager)
-        out0 = manager.Value('d', 0)
-        out1 = manager.Value('d', 0)
-
-        return [out0, out1]
 
     @classmethod
     def create_shared_outputs_rw(cls, manager: BaseManager):
@@ -85,19 +72,6 @@ class ImageMLController(Component):
         t1 = time.monotonic()
         self.logger.log('timelapsed', t1-t0)
         return out[0], out[1]#, out[2], out[3]
-
-    @classmethod
-    def create_shared_outputs(cls, manager: BaseManager) -> List[Optional[BaseProxy]]:
-        """
-        override this method to set the ctypes and initial values for the shared values 
-        use the type hint to infer by default 
-        """ 
-        
-        assert isinstance(manager, SyncManager)
-        out0 = manager.Value('d', 0)
-        out1 = manager.Value('d', 0)
-
-        return [out0, out1]
 
     @classmethod
     def create_shared_outputs_rw(cls, manager: BaseManager):
