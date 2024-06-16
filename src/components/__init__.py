@@ -11,6 +11,13 @@ from multiprocessing.managers import BaseProxy, BaseManager, SyncManager
 
 from threading import Lock as ThreahingLock
 
+
+
+from multiprocessing import Semaphore, Lock
+from multiprocessing.synchronize import Lock as LockType, Semaphore as SemaphoreType
+from multiprocessing.managers import BaseProxy, BaseManager, SyncManager, ListProxy, DictProxy
+
+
 from typing_extensions import deprecated
 import warnings
 import inspect
@@ -33,40 +40,6 @@ def get_switches(v1: List[Callable[[], T]], v2: List[Callable[[], T]], use1: Cal
             get_switch(_v1, _v2, use1 )
         )
     return values
-
-# def default_loop_v2( 
-#     instantiater, 
-#     init_kwargs, 
-#     interval,
-#     past_due_warning_sec=np.inf, 
-#     input_readers:List[Callable] = [], 
-#     output_assigners:List[Callable] = [],
-#     other_io:Dict[str, Callable] = {},     
-# ):
-#     obj = instantiater(**init_kwargs, **other_io)
-
-#     t_last = time.monotonic()
-#     while True: 
-#         now = time.monotonic()
-
-#         time_passed = now - t_last
-#         time_past_due = time_passed - interval
-#         if time_past_due >= 0: 
-#             if time_past_due > past_due_warning_sec:
-#                 warnings.warn(f"time_past_due: {time_past_due}, interval: {interval}")
-#             t_last = now
-            
-#             outputs = obj.step(*[f() for f in input_readers])
-#             if outputs is None: 
-#                 outputs = ()
-#             for idx, o in enumerate(outputs): 
-#                 output_assigners[idx](o)
-
-#             obj.logger.increment_idx() 
-
-#         else: 
-#             time.sleep(interval/50)
-
 
 def shared_list(typecodes, default_values):
     """TODO: testing needed"""
@@ -93,17 +66,6 @@ def shared_value_v2(typecode: Any, default_value:Any=0) -> Tuple[Callable, Calla
     return reader, assigner
 
 
-# @deprecated("use v2 (no manager)")
-# def shared_value(manager: SyncManager, typecode: Any, default_value:Any=0) -> Tuple[Callable, Callable]:
-#     proxy = manager.Value(typecode, default_value)
-#     def reader():
-#         return proxy.value
-
-#     def assigner(value):
-#         proxy.value=value
-
-#     return reader, assigner
-
 def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callable, Callable]:
 
     flatten_arr = Array(typecode, default_value.ravel().tolist())
@@ -117,106 +79,7 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
 
     return reader, assigner
 
-
-# @deprecated("use v2 (no manager)")
-# def shared_np_array(manager: SyncManager, typecode: Any, default_value: np.ndarray) -> Tuple[Callable, Callable]:
-
-#     flatten_proxy = manager.Array(typecode, default_value.ravel().tolist())
-#     dim = default_value.shape
-
-#     def assigner(value: np.ndarray):
-#         flatten_proxy[:] = array.array(typecode, value.ravel()) # type: ignore
-
-#     def reader():
-#         return np.array(flatten_proxy[:]).reshape(dim)
-
-#     return reader, assigner
-
-
-
-
-# def default_component_process_starter_v3(
-#     target_class: Type["Component"], 
-#     init_kwargs: Dict, 
-#     mainloop: Callable, 
-#     main_kwargs: Dict, 
-#     manager: BaseManager, 
-#     shared_outputs_kwargs: Dict = {}, 
-#     instantiater: Optional[Callable] = None, 
-# ) -> Tuple[List[Callable], Callable] :
-#     """
-#     create the output and a function that takes the input proxy to start the process
-
-#     main_kwargs: arguments to main except the proxies (
-#         i.e. shared_inputs, shared_outputs, shared_values
-#     )
-    
-#     """
-    
-#     output_readers, output_assigners = target_class.create_shared_outputs_rw(manager, **shared_outputs_kwargs)
-    
-#     def starter(input_readers: List[BaseProxy]=[]) -> Process:
-#         process = Process(
-#             target=mainloop, 
-#             kwargs=dict(
-#                 instantiater = instantiater if instantiater else target_class.entry, 
-#                 init_kwargs = init_kwargs, 
-
-#                 input_readers= input_readers, 
-#                 output_assigners = output_assigners,
-#                 **main_kwargs  
-#                 )
-#             )
-#         process.start()
-#         return process
-
-#     return output_readers, starter
-
-
-# def default_component_process_starter_v2(
-#     target_class: Type["Component"], 
-#     init_kwargs: Dict, 
-#     mainloop: Callable, 
-#     main_kwargs: Dict, 
-#     manager: BaseManager, 
-#     shared_outputs_kwargs: Dict = {}
-# ) -> Tuple[List[Callable], Callable] :
-#     """
-#     create the output and a function that takes the input proxy to start the process
-
-#     main_kwargs: arguments to main except the proxies (
-#         i.e. shared_inputs, shared_outputs, shared_values
-#     )
-    
-#     """
-    
-#     output_readers, output_assigners = target_class.create_shared_outputs_rw(manager, **shared_outputs_kwargs)
-    
-#     def starter(input_readers: List[BaseProxy]=[]) -> Process:
-#         process = Process(
-#             target=mainloop, 
-#             kwargs=dict(
-#                 instantiater = target_class.entry,  #bad! 
-#                 init_kwargs = init_kwargs, 
-
-#                 input_readers= input_readers, 
-#                 output_assigners = output_assigners,
-#                 **main_kwargs  
-#                 )
-#             )
-#         process.start()
-#         return process
-
-#     return output_readers, starter
-
-
-
-from multiprocessing import Semaphore, Lock
-from multiprocessing.synchronize import Lock as LockType, Semaphore as SemaphoreType
-from multiprocessing.managers import BaseProxy, BaseManager, SyncManager, ListProxy, DictProxy
-
-
-class ReceiverChannel:
+class MessageChannel:
     def __init__(self, name, manager: SyncManager):
 
         self.name = name
@@ -226,12 +89,10 @@ class ReceiverChannel:
         self.msg_pending: ListProxy[Tuple[int, Any]] = manager.list()
         self.res_pending: DictProxy[int, Any] = manager.dict()
 
-        # TODO
+        
         self.response_locks: DictProxy[int, Any] = manager.dict()
 
         self.msg_id = -1
-
-        # TODO: make sure that these semaphores are the same one after this object is passed into the processes
         self.msg_semaphore = Semaphore(0)
 
 
@@ -281,6 +142,7 @@ class ReceiverChannel:
 
     def start_message_handling_thread(self, handler: Callable[[Any], Any]):
         # TODO: saving t to self.t may make the object unpickleable?
+        # TODO: have a pool of threads to consume the messages as fast as possible 
         t = threading.Thread(target=self.message_handling_loop, kwargs=dict(handler=handler))
         t.start()
         return t
@@ -307,7 +169,7 @@ def get_handler_from_step(step: Callable, input_readers, output_assigners):
 class EventBroadcaster:
     def __init__(self, name,  manager: SyncManager):
         self.name = name
-        self.subscriptions: Dict[str, ReceiverChannel] = {}
+        self.subscriptions: Dict[str, MessageChannel] = {}
         self.manager = manager
 
     def publish(self, msg):
@@ -315,7 +177,7 @@ class EventBroadcaster:
             sub.send_message(msg, expect_response=False)
 
     def subscrible(self, receiver_name):
-        new_sub = ReceiverChannel(receiver_name, manager=self.manager)
+        new_sub = MessageChannel(receiver_name, manager=self.manager)
         self.subscriptions[receiver_name] = new_sub
         return new_sub
 
@@ -332,6 +194,12 @@ def loop(func, ideal_interval):
         time.sleep(max(0, itv_to_sleep))
 
 def component(events_to_produce: List[str]):
+    """
+    events_to_produce: 
+        the name of the event should match the parameter of the init 
+        the object will be a event broadcaster object 
+
+    """
     def dec(cls):    
         assert not hasattr(cls, "rpc_list"), "reserved attribute name"
         assert not hasattr(cls, "event_handlers"), "reserved attribute name"
@@ -359,7 +227,7 @@ def component(events_to_produce: List[str]):
 
 def event_handler(event_name: str):
     """
-    the ReceiverChannel is instantiated by the event broadcaster from other components 
+    the MessageChannel is instantiated by the event broadcaster from other components 
     """
 
     def dec(func: Callable): 
@@ -373,7 +241,7 @@ def event_handler(event_name: str):
 
 def rpc(func: Callable):
     """
-    the ReceiverChannel is instantiated by this component and passed on to the other components
+    the MessageChannel is instantiated by this component and passed on to the other components
     """
     #TODO: type check the call to make sure it only takes one message 
     setattr(func, "handler_type", "rpc")
@@ -385,9 +253,9 @@ def target(
     component_class, 
     instantiater: Callable, 
     incoming_value_samplers: List[Callable[[], Any]], 
-    incoming_channels:Dict[str, ReceiverChannel], 
+    incoming_channels:Dict[str, MessageChannel], 
     outgoing_value_assigners: List[Callable[[Any], None]],
-    outgoing_rpcs:Dict[str, ReceiverChannel], 
+    outgoing_rpcs:Dict[str, MessageChannel], 
     outgoing_event_broadcasters:Dict[str, EventBroadcaster], 
     loop: Callable[[Callable], None], 
     loop_kwargs, 
@@ -415,7 +283,7 @@ def create_component_starter(component_class, manager, loop, init_kwargs, loop_k
     incoming_rpc = {}
 
     for f in component_class.rpc_list:
-        chan = ReceiverChannel(f.__qualname__, manager)
+        chan = MessageChannel(f.__qualname__, manager)
         incoming_channels[f.__name__] = chan
         incoming_rpc[f.__name__] = chan
 
@@ -432,12 +300,6 @@ def create_component_starter(component_class, manager, loop, init_kwargs, loop_k
 
         for event_name, f in component_class.event_handlers.items():
             incoming_channels[f.__name__] = incoming_events[event_name].subscrible(f.__qualname__)
-
-        #TODO:
-        # incoming_value_samplers
-        # incoming_channels
-        # event_broadcaster
-        # outgoing_rpcs
 
         process = Process(
             target=target, 
@@ -462,7 +324,7 @@ def create_component_starter(component_class, manager, loop, init_kwargs, loop_k
 
 
 
-# def register_event_handlings_v2(channels: List[ReceiverChannel], handlers:List[Callable]):
+# def register_event_handlings_v2(channels: List[MessageChannel], handlers:List[Callable]):
 #     threads = []
 #     for c, h in zip(channels, handlers):
 #         threads.append(c.start_message_handling_thread(h, False))
@@ -470,7 +332,7 @@ def create_component_starter(component_class, manager, loop, init_kwargs, loop_k
 #     return threads  
 
 
-# def register_event_handlings(channels: List[ReceiverChannel], handlers:List[Callable]):
+# def register_event_handlings(channels: List[MessageChannel], handlers:List[Callable]):
 #     threads = []
 #     for c, h in zip(channels, handlers):
 #         t = threading.Thread(target=c.message_handling_loop, kwargs=dict(handler=h))
