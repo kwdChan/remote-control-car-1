@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from re import L
 import time
 from typing import Callable, Tuple, TypeVar, cast, get_origin, get_args, Union, Any, Optional, Dict, List
 import threading
@@ -18,66 +17,13 @@ from multiprocessing.synchronize import Lock as LockType, Semaphore as Semaphore
 from multiprocessing.managers import BaseProxy, BaseManager, SyncManager, ListProxy, DictProxy
 
 
-from typing_extensions import Self, deprecated
+from typing_extensions import deprecated
 import warnings
 import inspect
 import numpy as np
 from data_collection.data_collection import Logger
 from typing import Type
 import array
-
-T = TypeVar('T')
-def get_switch(v1: Callable[[], T], v2: Callable[[], T], use1: Callable[[], bool]) -> Callable[[], T]:
-
-    return lambda: v1() if use1() else v2()
-
-
-def get_switches(v1: List[Callable[[], T]], v2: List[Callable[[], T]], use1: Callable[[], bool]) -> List[Callable[[], T]]:
-    
-    values = []
-    for _v1, _v2 in zip(v1, v2):
-        values.append(
-            get_switch(_v1, _v2, use1 )
-        )
-    return values
-
-def shared_list(typecodes, default_values):
-    """TODO: testing needed"""
-    v_list = [Value(tc, dv) for tc, dv in zip(typecodes, default_values)]
-
-    def reader():
-        return [v.value for v in v_list]
-
-    def assigner(slicer, value):
-        v_list[slicer] = value
-
-    return reader, assigner
-
-
-def shared_value_v2(typecode: Any, default_value:Any=0) -> Tuple[Callable, Callable]:
-
-    v = Value(typecode, default_value)
-    def reader():
-        return v.value
-
-    def assigner(value):
-        v.value=value
-
-    return reader, assigner
-
-
-def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callable, Callable]:
-
-    flatten_arr = Array(typecode, default_value.ravel().tolist())
-    dim = default_value.shape
-
-    def assigner(value: np.ndarray):
-        flatten_arr[:] = array.array(typecode, value.ravel()) # type: ignore
-
-    def reader():
-        return np.array(flatten_arr[:]).reshape(dim)
-
-    return reader, assigner
 
 
 
@@ -172,20 +118,6 @@ class MessageChannel:
         return self.await_response(msg_id)
 
 
-def get_handler_from_step(step: Callable, input_readers, output_assigners):
-    """
-    the parameters are sampled and the step is called
-    the returned values of the step is used to set the values to be sampled by other processes 
-    """
-
-    def handler(msg=None): 
-        outputs = step(*[f() for f in input_readers])
-        if outputs is None: 
-            outputs = ()
-        for idx, o in enumerate(outputs): 
-            output_assigners[idx](o)
-    return handler 
-
 class EventBroadcaster:
     def __init__(self, name,  manager: SyncManager, msg_reader=None, msg_writer=None):
         self.name = name
@@ -217,6 +149,20 @@ class EventBroadcaster:
 
         self.locked = True
 
+def get_handler_from_step(step: Callable, input_readers, output_assigners):
+    """
+    the parameters are sampled and the step is called
+    the returned values of the step is used to set the values to be sampled by other processes 
+    """
+
+    def handler(msg=None): 
+        outputs = step(*[f() for f in input_readers])
+        if outputs is None: 
+            outputs = ()
+        for idx, o in enumerate(outputs): 
+            output_assigners[idx](o)
+    return handler 
+
 
 def loop(func, ideal_interval):
     while True:
@@ -240,7 +186,9 @@ class ComponentInterface:
     events_to_produce: component_decorator_param_type = {}
 
 def component(events_to_produce: component_decorator_param_type):
+    
     """
+    TODO: use roles to unify all the handler types 
     events_to_produce: 
         the name of the event should match the parameter of the init 
         the object will be a event broadcaster object 
@@ -287,7 +235,6 @@ def component(events_to_produce: component_decorator_param_type):
     return dec
 
 
-
 def event_handler(event_name: str):
     """
     the MessageChannel is instantiated by the event broadcaster from other components 
@@ -311,7 +258,6 @@ def rpc(
         """
         the MessageChannel is instantiated by this component and passed on to the other components
         """
-        #TODO: type check the call to make sure it only takes one message 
         setattr(func, "handler_type", "rpc")
         setattr(func, "msg_reader", msg_reader)
         setattr(func, "msg_writer", msg_writer)
@@ -319,6 +265,62 @@ def rpc(
         return func 
 
     return dec
+
+
+
+T = TypeVar('T')
+def get_switch(v1: Callable[[], T], v2: Callable[[], T], use1: Callable[[], bool]) -> Callable[[], T]:
+
+    return lambda: v1() if use1() else v2()
+
+
+def get_switches(v1: List[Callable[[], T]], v2: List[Callable[[], T]], use1: Callable[[], bool]) -> List[Callable[[], T]]:
+    
+    values = []
+    for _v1, _v2 in zip(v1, v2):
+        values.append(
+            get_switch(_v1, _v2, use1 )
+        )
+    return values
+
+def shared_list(typecodes, default_values):
+    """TODO: testing needed"""
+    v_list = [Value(tc, dv) for tc, dv in zip(typecodes, default_values)]
+
+    def reader():
+        return [v.value for v in v_list]
+
+    def assigner(slicer, value):
+        v_list[slicer] = value
+
+    return reader, assigner
+
+
+def shared_value_v2(typecode: Any, default_value:Any=0) -> Tuple[Callable, Callable]:
+
+    v = Value(typecode, default_value)
+    def reader():
+        return v.value
+
+    def assigner(value):
+        v.value=value
+
+    return reader, assigner
+
+
+def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callable, Callable]:
+
+    flatten_arr = Array(typecode, default_value.ravel().tolist())
+    dim = default_value.shape
+
+    def assigner(value: np.ndarray):
+        flatten_arr[:] = array.array(typecode, value.ravel()) # type: ignore
+
+    def reader():
+        return np.array(flatten_arr[:]).reshape(dim)
+
+    return reader, assigner
+
 
 
 SampleReader = Callable[[], Any]
@@ -368,8 +370,10 @@ def samples_producer(typecodes:List[Any], default_values:List[Any], setup_functi
     return dec
 
 
-
 def sampler(func: Callable):
+    """
+    TODO: 
+    """
     setattr(func, "handler_type", "sample-related")
 
     if not hasattr(func, "roles"):
@@ -377,9 +381,6 @@ def sampler(func: Callable):
     getattr(func, "roles").append("sampler")
     
     return func
-
-
-
 
 def target(
     component_class: Type[ComponentInterface], 
@@ -468,6 +469,7 @@ def create_component_starter(
         outgoing_value_samplers, outgoing_value_assigners = [], []
 
 
+    # this feels so wrong haha
     class ComponentStarter:
         def __init__(self, outgoing_value_samplers, incoming_rpc, outgoing_event_broadcaster) :
             self.process: Process
@@ -481,9 +483,6 @@ def create_component_starter(
             self.outgoing_rpc: Dict[str, MessageChannel] = {}
             self.incoming_samples:List[SampleReader] = []
             self.incoming_events: Dict[str, EventBroadcaster] = {}
-
-
-
 
         def start(self):
 
@@ -512,7 +511,7 @@ def create_component_starter(
 
 
         def register_incoming_events(self, incoming_events: Dict[str, EventBroadcaster]):
-            # TODO: this is very cursed
+            # TODO: this is very cursed 
             for event_name, f in component_class.event_handlers.items():
                 incoming_channels[f.__name__] = incoming_events[event_name].subscrible(f.__qualname__)
 
@@ -523,16 +522,12 @@ def create_component_starter(
         def register_incoming_samples(self, incoming_samples: List[SampleReader]):
             self.incoming_samples = incoming_samples 
 
-             
-      
-
+            
     
     starter = ComponentStarter(outgoing_value_samplers, incoming_rpc, outgoing_event_broadcasters)
 
 
     return starter
-
-
 
 
 
@@ -588,29 +583,5 @@ def testing_function():
     starter1.start()
 
     return starter1, sample_writer, event, sub
-
-
-
-
-
-# def register_event_handlings_v2(channels: List[MessageChannel], handlers:List[Callable]):
-#     threads = []
-#     for c, h in zip(channels, handlers):
-#         threads.append(c.start_message_handling_thread(h, False))
-
-#     return threads  
-
-
-# def register_event_handlings(channels: List[MessageChannel], handlers:List[Callable]):
-#     threads = []
-#     for c, h in zip(channels, handlers):
-#         t = threading.Thread(target=c.message_handling_loop, kwargs=dict(handler=h))
-#         threads.append(t)
-
-#     for t in threads: 
-#         t.start()
-#     return threads 
-
-
 
 
