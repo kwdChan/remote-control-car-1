@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from components import component, sampler, samples_producer, event_handler, rpc
 from components import EventBroadcaster, ComponentInterface, MessageChannel
-from components.logger import increment_index_event, log_event
+from components.logger import increment_index_event, log_event, log_time_event
 
 import numpy as np
 from typing import Dict, List

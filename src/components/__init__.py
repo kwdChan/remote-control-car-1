@@ -33,6 +33,7 @@ class EventEnum(Enum):
     log_time = 3
     setup_video_saver = 4
     video_frame = 5
+    bluetooth_controller = 6
 
 
 
@@ -246,6 +247,8 @@ def component(events_to_produce: component_decorator_param_type):
         return cls
     return dec
 
+# TODO: name crashing problem
+# TODO: add options to ignore the old events if too many is on the queue
 
 def event_handler(event_name: str):
     """

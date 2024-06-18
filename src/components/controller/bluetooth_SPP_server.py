@@ -9,6 +9,27 @@ from multiprocessing.managers import BaseProxy, BaseManager, DictProxy, SyncMana
 from multiprocessing import Process
 import sys
 
+
+from components import EventEnum, component, sampler, samples_producer, event_handler, rpc
+from components import EventBroadcaster, ComponentInterface, MessageChannel
+from components.logger import increment_index_event, log_event
+
+def start_bluetooth_server_v3(manager: SyncManager):
+
+    event = EventBroadcaster('bluetooth', manager)
+    def update(message:str):
+        event.publish({'event_type': EventEnum.bluetooth_controller, 'message': message})
+
+    p = Process(
+        target=main,
+        args=(update, )
+    )
+    p.start()
+
+    return event, p
+    
+
+
 def start_bluetooth_server_v2(manager: SyncManager):
 
     data = manager.dict()
