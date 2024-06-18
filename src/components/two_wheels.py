@@ -27,7 +27,7 @@ def setup_pwm(pin, freq=300) -> GPIO.PWM: #type: ignore
 
 @component({'logging':None})
 class TwoWheelsV3(ComponentInterface):
-    def __init__(self, ch_left: GPIO.PWM, ch_right: GPIO.PWM, logging: EventBroadcaster):
+    def __init__(self, ch_left: GPIO.PWM, ch_right: GPIO.PWM, logging: EventBroadcaster, name):
 
         ch_left.start(0)
         ch_right.start(0)
@@ -36,8 +36,7 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_right = ch_right
 
         self.logging = logging
-        self.name = 'two_wheel'
-
+        self.name = name
     @sampler
     def step(
         self, 
@@ -64,7 +63,8 @@ class TwoWheelsV3(ComponentInterface):
         left_pin, 
         right_pin, 
         dir_pins: Tuple[int, int],
-        logging: EventBroadcaster, 
+        logging: EventBroadcaster,
+        name,  
     ):
 
         ch_left = setup_pwm(left_pin, freq=300)
@@ -78,7 +78,7 @@ class TwoWheelsV3(ComponentInterface):
         GPIO.output(dir_pins[1], 0) #type: ignore
 
 
-        return cls(ch_left, ch_right, logging)
+        return cls(ch_left, ch_right, logging, name)
 
 
 

@@ -197,6 +197,17 @@ class ComponentInterface:
 
 ComponentSubtype = TypeVar('ComponentSubtype', bound=ComponentInterface)
 
+
+# TODO: one decorator per event 
+def event_producer(event_name, reader=None, writer=None):
+    raise NotImplementedError('remove this line "cls.events_to_produce = events_to_produce" from @component')
+    def dec(cls):
+        raise NotImplementedError('component_decorator_param_type check typing')
+        cls.events_to_produce[event_name] = reader, writer
+
+        return cls
+    return dec 
+
 def component(events_to_produce: component_decorator_param_type):
     
     """
@@ -246,10 +257,7 @@ def component(events_to_produce: component_decorator_param_type):
         return cls
     return dec
 
-# TODO: name crashing problem
 # TODO: add options to ignore the old events if too many is on the queue
-
-
 def event_handler(func: Callable[[Any, Any], Any]): 
     """
     the MessageChannel is instantiated by the event broadcaster from other components 

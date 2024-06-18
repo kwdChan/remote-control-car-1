@@ -29,8 +29,8 @@ def video_frame_event(event_broadcaster: EventBroadcaster, name:str, frame):
 
 
 @component({"logging":None, "frame_event":None})
-class PicameraV3(ComponentInterface):
-    def __init__(self, resolution, framerate, config_overrides,  logging: EventBroadcaster, frame_event: EventBroadcaster, name="PicameraV2"):
+class Picamera2V2(ComponentInterface):
+    def __init__(self, resolution, framerate,  logging: EventBroadcaster, frame_event: EventBroadcaster, config_overrides ={},  name="PicameraV2"):
         """
         64 is the minimum it can go in each dimension
 

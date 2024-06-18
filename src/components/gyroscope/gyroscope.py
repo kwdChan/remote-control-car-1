@@ -205,15 +205,16 @@ class AngularSpeedControlV3(ComponentInterface):
         logging:EventBroadcaster,
         i2c_address=0x68, 
         bus_num=1,
+        name = "AngularSpeedControlV3", 
         **kwargs
     ):
         
         device = mpu6050.MPU6050(i2c_address, bus_num)
 
-        logger_name = "AngularSpeedControlV3"
+        name = "AngularSpeedControlV3"
 
-        tracker = OrientationTrackerV3(device, logging=logging, name=logger_name)
-        control = cls(tracker, logging=logging, name=logger_name)
+        tracker = OrientationTrackerV3(device, logging=logging, name=name)
+        control = cls(tracker, logging=logging, name=name)
         return control
 
 
