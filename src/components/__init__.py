@@ -190,7 +190,7 @@ component_decorator_param_type = Dict[str, Optional[Tuple[Callable[[Any], Any], 
 
 class ComponentInterface:
     rpc_list = []
-    event_handlers = {}
+    event_handlers = []
     samplers = []
     sample_producers = []
     events_to_produce: component_decorator_param_type = {}
@@ -215,7 +215,7 @@ def component(events_to_produce: component_decorator_param_type):
         # assert not hasattr(cls, "sample_producers"), "reserved attribute name"
 
         cls.rpc_list = []
-        cls.event_handlers = {}
+        cls.event_handlers = []
         
         cls.samplers = []
         cls.sample_producers = []
@@ -226,8 +226,7 @@ def component(events_to_produce: component_decorator_param_type):
             if not hasattr(v, "handler_type"): continue
 
             if v.handler_type == "event_handler":
-                assert hasattr(v, "event_name")
-                cls.event_handlers[v.event_name] = v
+                cls.event_handlers.append(v)
             
             elif v.handler_type == 'rpc':
                 cls.rpc_list.append(v)
@@ -250,19 +249,15 @@ def component(events_to_produce: component_decorator_param_type):
 # TODO: name crashing problem
 # TODO: add options to ignore the old events if too many is on the queue
 
-def event_handler(event_name: str):
+
+def event_handler(func: Callable[[Any, Any], Any]): 
     """
     the MessageChannel is instantiated by the event broadcaster from other components 
     """
+    setattr(func, "handler_type", "event_handler")
 
-    def dec(func: Callable[[Any, Any], Any]): 
-        
-        setattr(func, "handler_type", "event_handler")
-        setattr(func, "event_name", event_name)
+    return func
 
-        return func
-
-    return dec 
 
 def rpc(
     msg_reader: Optional[Callable[[Any], Any]] = None, 
@@ -401,7 +396,7 @@ def target(
     component_class: Type[ComponentInterface], 
     instantiater: Callable[..., ComponentInterface], 
     incoming_value_samplers: List[Callable[[], Any]], 
-    incoming_channels:Dict[str, MessageChannel], 
+    incoming_channels:Dict[str, List[MessageChannel]], 
     outgoing_value_assigners: List[Callable[[Any], None]],
     outgoing_rpcs:Dict[str, MessageChannel], 
     outgoing_event_broadcasters:Dict[str, EventBroadcaster], 
@@ -412,8 +407,9 @@ def target(
 
     obj = instantiater(**init_kwargs, **outgoing_rpcs, **outgoing_event_broadcasters)
 
-    for name, chan in incoming_channels.items():
-        chan.start_message_handling_thread(getattr(obj, name))
+    for name, chans in incoming_channels.items():
+        for c in chans: 
+            c.start_message_handling_thread(getattr(obj, name))
 
 
     sampler_names = [s.__name__ for s in component_class.samplers]
@@ -445,19 +441,37 @@ def target(
 def create_component_starter(
     component_class:Type[ComponentInterface], 
     manager: SyncManager, 
-    loop, init_kwargs, loop_kwargs, instantiater=None):
+    loop, init_kwargs, loop_kwargs, instantiater=None
+    ):
+    """
+    1. create a message channel for each method with @rpc, identified by function name
+    2. create a event broadcaster for each event named by @component TODO: may create a @event_producer decorator
+    3. create a list of readers and writers of the samples using the setup function attached by @sample_producer
+
+
+    Expect:
+    1. message channel for rpc of the other component, matached to the name of the variable in the instantiator 
+    2. a list of sample readers, matched by argument position of the method with @sampler
+    3. 
+
+    """
+
+
 
     assert hasattr(component_class, "rpc_list")
     assert hasattr(component_class, "event_handlers")
     assert hasattr(component_class, "events_to_produce")
     
-    incoming_channels = {}
-    incoming_rpc = {}
+    # method name -> list[message channel] 
+    incoming_channels: Dict[str, List[MessageChannel]] = {}
+    incoming_rpc: Dict[str, MessageChannel] = {}
 
+
+    # create a message channel for each method with @rpc, identified by function name
     for f in component_class.rpc_list:
         
         chan = MessageChannel(f.__qualname__, manager, f.msg_reader, f.msg_writer) 
-        incoming_channels[f.__name__] = chan
+        incoming_channels[f.__name__] = [chan]
         incoming_rpc[f.__name__] = chan
 
     
@@ -525,10 +539,25 @@ def create_component_starter(
             self.process.start()
 
 
-        def register_incoming_events(self, incoming_events: Dict[str, EventBroadcaster]):
-            # TODO: this is very cursed 
-            for event_name, f in component_class.event_handlers.items():
-                incoming_channels[f.__name__] = incoming_events[event_name].subscrible(f.__qualname__)
+        def register_incoming_events(self, incoming_events: Dict[str, List[EventBroadcaster]]):
+            """
+            incoming_events: 
+                handler_name -> List[EventBroadcaster]
+            """
+
+            # TODO: very bad practice: modifying incoming_channels here
+            handler_by_name = {f.__name__:f for f in component_class.event_handlers}
+            for fname, events in incoming_events.items():
+
+                f = handler_by_name[fname]
+                if not fname in incoming_channels: 
+                    incoming_channels[fname] = []
+                for e in events:
+                    sub = e.subscrible(f.__qualname__)
+                
+                    incoming_channels[fname].append(sub)
+                
+
 
         def register_outgoing_rpc(self, outgoing_rpc):
             self.outgoing_rpc = outgoing_rpc
@@ -563,7 +592,7 @@ class MyTestComponent(ComponentInterface):
         return self.idx, np.random.random((4,4))
         
 
-    @event_handler("increment")
+    @event_handler
     def recv(self, msg):
         print(f'increment: {msg}')
         self.idx += msg
@@ -592,7 +621,7 @@ def testing_function():
 
     starter1.register_incoming_samples(sample_reader)
     starter1.register_outgoing_rpc({})
-    starter1.register_incoming_events({"increment":event})
+    starter1.register_incoming_events({"recv":[event]})
     sub = starter1.outgoing_events['event_from_com1'].subscrible('from_outside')
     
     starter1.start()

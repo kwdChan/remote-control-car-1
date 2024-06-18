@@ -24,7 +24,7 @@ class ImageMLControllerV3b(ComponentInterface):
 
     
     # TODO: add time data and ignore the frames if the handler isn't fast enough
-    @event_handler('frame_event')
+    @event_handler
     def step(self, msg): 
         assert msg.get('event_type') == EventEnum.video_frame
         arr = msg.get('frame')

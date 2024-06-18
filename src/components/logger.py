@@ -40,7 +40,7 @@ class LoggerComponent(ComponentInterface):
         self.loggers: Dict[str, Logger] = {}
         self.component_idx: Dict[str, int] = {}
     
-    @event_handler("log")
+    @event_handler
     def log_handler(self, msg):
         event_type = msg.get('event_type')
 
@@ -96,36 +96,3 @@ class LoggerComponent(ComponentInterface):
         logger.save_video_frame(frame)
 
         
-
-    
-
-@component({"event_from_com1": None})
-class MyTestComponent(ComponentInterface):
-    def __init__(self, event_from_com1: EventBroadcaster):
-        self.event_from_com1 = event_from_com1
-        self.idx = -1
-
-    @samples_producer(['d', 'd'], [0, np.zeros((4,4))])
-    @sampler
-    def step(self, idx_other, arr_other):
-        self.idx += 1
-
-        self.event_from_com1.publish({"step": self.idx})
-        
-        
-        return self.idx, np.random.random((4,4))
-        
-
-    @event_handler("increment")
-    def recv(self, msg):
-        print(f'increment: {msg}')
-        self.idx += msg
-
-
-    @rpc()
-    def com1_rpc(self, msg):
-
-        print(f'com1 received msg: {msg}', flush=True)
-
-        return msg
-
