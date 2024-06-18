@@ -185,6 +185,8 @@ class ComponentInterface:
     sample_producers = []
     events_to_produce: component_decorator_param_type = {}
 
+ComponentSubtype = TypeVar('ComponentSubtype', bound=ComponentInterface)
+
 def component(events_to_produce: component_decorator_param_type):
     
     """
@@ -194,7 +196,8 @@ def component(events_to_produce: component_decorator_param_type):
         the object will be a event broadcaster object 
 
     """
-    def dec(cls: Type[ComponentInterface]):    
+    
+    def dec(cls: Type[ComponentSubtype]):    
         # assert not hasattr(cls, "rpc_list"), "reserved attribute name"
         # assert not hasattr(cls, "event_handlers"), "reserved attribute name"
         # assert not hasattr(cls, "events_to_produce"), "reserved attribute name"

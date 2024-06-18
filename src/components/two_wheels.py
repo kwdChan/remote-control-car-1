@@ -13,11 +13,12 @@ from dataclasses import dataclass
 
 from components import component, sampler, samples_producer, event_handler, rpc
 from components import EventBroadcaster, ComponentInterface, MessageChannel
+from components.logger import increment_index_event, log_event
+
 import numpy as np
 from typing import Dict, List
 from data_collection.data_collection import Logger, LoggerSet
 
-from components.logger import increment_index_event, log_event
 
 def setup_pwm(pin, freq=300) -> GPIO.PWM: #type: ignore
     GPIO.setup(pin, GPIO.OUT) #type: ignore

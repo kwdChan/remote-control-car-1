@@ -13,6 +13,9 @@ class EventType(Enum):
 
 
 def increment_index_event(event_broadcaster: EventBroadcaster, name):
+    """
+    this implementation allow logger name collision. not very safe. 
+    """
     event_broadcaster.publish(dict(event_type=EventType.increment_index, name=name))
     
 def log_event(event_broadcaster: EventBroadcaster, data:Dict, name: str):
