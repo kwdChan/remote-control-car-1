@@ -40,11 +40,11 @@ class OrientationTrackerV3(ComponentInterface):
 
         log_event(
             self.logging, 
+            self.name, 
             dict(
                 initial_ori=self.initial_ori, 
                 gyro_bias = self.gyro_bias, 
             ), 
-            self.name, 
             )
 
         # states
@@ -68,14 +68,14 @@ class OrientationTrackerV3(ComponentInterface):
         acc = np.array(acc) # TODO: does not exist in the old version
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
 
-        log_time_event(self.logging, "time_OrientationTracker", self.name)
+        log_time_event(self.logging, self.name, "time_OrientationTracker",)
         log_event(
             self.logging, 
+            self.name,
             dict(
                 q = new_ori, 
                 linear_acc = acc, 
             ), 
-            self.name
             )
 
         self.last_ori = new_ori
@@ -181,7 +181,7 @@ class AngularSpeedControlV3(ComponentInterface):
 
 
 
-        log_time_event(self.logging, "time_AngularSpeedControl", self.name)
+        log_time_event(self.logging,  self.name, "time_AngularSpeedControl",)
         data = dict(
             angle_diff = angle_diff, 
             axis = axis, # type:ignore # why is pyright complaining?? 
@@ -195,7 +195,7 @@ class AngularSpeedControlV3(ComponentInterface):
             warn = warn, 
             angular_velocity = angular_velocity, 
         )
-        log_event(self.logging, data, self.name)
+        log_event(self.logging, self.name, data)
 
         return left, right
         

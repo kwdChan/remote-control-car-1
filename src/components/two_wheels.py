@@ -55,7 +55,7 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_right.ChangeDutyCycle(right)
 
         increment_index_event(self.logging, self.name)
-        log_event(self.logging, dict(left=left, right=right), self.name)
+        log_event(self.logging, self.name,  dict(left=left, right=right))
         
   
     @classmethod

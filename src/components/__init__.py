@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from enum import Enum
 import time
 from typing import Callable, Tuple, TypeVar, cast, get_origin, get_args, Union, Any, Optional, Dict, List
 import threading
@@ -24,6 +25,14 @@ import numpy as np
 from data_collection.data_collection import Logger
 from typing import Type
 import array
+
+
+class EventEnum(Enum):
+    increment_index = 1
+    log = 2
+    log_time = 3
+    setup_video_saver = 4
+    video_frame = 5
 
 
 
@@ -353,7 +362,7 @@ def numpy_sample_setup(typecodes, default_values):
 
     return readers, writers
 
-
+# TODO: this requires the shape of the array to be pre-defined in the decorator, which is not ideal 
 def samples_producer(typecodes:List[Any], default_values:List[Any], setup_function:SampleSetupFunction=numpy_sample_setup):
 
     def setup(): 
