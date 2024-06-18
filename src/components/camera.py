@@ -28,9 +28,9 @@ def video_frame_event(event_broadcaster: EventBroadcaster, name:str, frame):
 
 
 
-@component({"logging":None})
+@component({"logging":None, "frame_event":None})
 class PicameraV3(ComponentInterface):
-    def __init__(self, resolution, framerate, config_overrides,  logging: EventBroadcaster, name="PicameraV2"):
+    def __init__(self, resolution, framerate, config_overrides,  logging: EventBroadcaster, frame_event: EventBroadcaster, name="PicameraV2"):
         """
         64 is the minimum it can go in each dimension
 
@@ -54,12 +54,15 @@ class PicameraV3(ComponentInterface):
         self.cap = picam2
         self.logging = logging
         self.name = name
+        self.frame_event = frame_event
 
     @sampler # TODO: sampler 
     def step(self):
         img = self.cap.capture_array("main")[:, :, :3] # type: ignore 
 
         log_time_event(self.logging, self.name, 'time')
+
+        self.frame_event.publish(dict(event_type=EventEnum.video_frame, frame=img, metadata=dict()))
         
         video_frame_event(self.logging, self.name, img)
 
