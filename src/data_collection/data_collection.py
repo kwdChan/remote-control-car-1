@@ -8,7 +8,7 @@ from .video_data import VideoSaver
 from tqdm import tqdm
 from copy import copy
 
-import signal, sys, atexit
+#import signal, sys, atexit
 class LoggerSet:
     def __init__(self, path:Union[str, Path]='../log/temp', overwrite_ok=False, override_save_interval=None):
         path_obj = Path(path) 
@@ -72,9 +72,9 @@ class Logger:
             assert overwrite_ok
         path_obj.mkdir(parents=True, exist_ok=overwrite_ok)
 
-        signal.signal(signal.SIGINT, self.__signal_handler)
-        signal.signal(signal.SIGTERM, self.__signal_handler)
-        atexit.register(self.save)
+        # signal.signal(signal.SIGINT, self.__signal_handler)
+        # signal.signal(signal.SIGTERM, self.__signal_handler)
+        # atexit.register(self.save)
 
 
         self.path = path_obj
@@ -88,14 +88,14 @@ class Logger:
         self.idx = 0
         self.last_saved = time.monotonic()
 
-    def __signal_handler(self, signum, frame):
+    # def __signal_handler(self, signum, frame):
         
-        self.save()
+    #     self.save()
 
-        if signum == signal.SIGTERM: 
-            sys.exit(0)
-        else:
-            print('handled SIGINT')
+    #     if signum == signal.SIGTERM: 
+    #         sys.exit(0)
+    #     else:
+    #         print('handled SIGINT')
         
 
     def __repr__(self):

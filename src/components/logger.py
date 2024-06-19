@@ -57,7 +57,7 @@ class LoggerComponent(ComponentInterface):
             self.setup_video_saver(msg.get('name'), msg.get('kwargs'))
 
         elif event_type == EventEnum.video_frame:
-            self.log_time(msg.get('name'), msg.get('frame'))
+            self.save_video_frame(msg.get('name'), msg.get('frame'))
 
 
     def get_create_logger(self, name):
@@ -72,11 +72,11 @@ class LoggerComponent(ComponentInterface):
         logger.increment_idx()
         logger.log_time()
         
-    def log(self, data, name):
+    def log(self, data:Dict, name):
 
         logger = self.get_create_logger(name)
 
-        for k, v in data:
+        for k, v in data.items():
             logger.log(k, v)
 
     def log_time(self, key, name):

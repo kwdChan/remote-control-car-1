@@ -440,8 +440,8 @@ def target(
                 )
 
         )
-    
-    loop(sampler_handlers[0], **loop_kwargs)
+    if len(sampler_handlers): 
+        loop(sampler_handlers[0], **loop_kwargs)
 
 
 
@@ -597,7 +597,7 @@ class MyTestComponent(ComponentInterface):
         self.event_from_com1.publish({"step": self.idx})
         
         
-        return self.idx, np.random.random((4,4))
+        return self.idx, np.random.random((4,4)) # type: ignore
         
 
     @event_handler
