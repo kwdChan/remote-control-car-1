@@ -1,7 +1,7 @@
-from abc import abstractmethod
+
 from enum import Enum
 import time
-from typing import Callable, Tuple, TypeVar, cast, get_origin, get_args, Union, Any, Optional, Dict, List
+from typing import Callable, Generic, Tuple, TypeVar, TypedDict, cast, get_origin, get_args, Union, Any, Optional, Dict, List
 import threading
 
 from multiprocessing import Value, Process
@@ -23,12 +23,13 @@ import warnings
 import inspect
 import numpy as np
 from data_collection.data_collection import Logger
-from typing import Type
+from typing import Type, ParamSpec
 import array
 
-
-
+P = ParamSpec('P')
 T = TypeVar('T')
+F = TypeVar('F', bound=Callable)
+
 def get_switch(v1: Callable[[], T], v2: Callable[[], T], use1: Callable[[], bool]) -> Callable[[], T]:
 
     return lambda: v1() if use1() else v2()
@@ -81,30 +82,31 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
 
     return reader, assigner
 
-
-class CallChannel:
-    
-    @staticmethod
-    def default_kwargs_reader(kwargs:Dict):
-        return kwargs
+#TODO: ParamSpec is not implemented on python 3.9 that pi uses
+class CallChannel(Generic[P, T]):
 
     @staticmethod
-    def default_kwargs_writer(store):
-        return store
+    def default_args_reader(args:Tuple, kwargs:Dict):
+        return args, kwargs
+
+    @staticmethod
+    def default_args_writer(args:Tuple, kwargs:Dict):
+        return args, kwargs
+
 
     def __init__(
         self, 
         name, 
         manager: SyncManager, 
-        kwargs_reader: Optional[Callable[[Dict], Dict]]=None, 
-        kwargs_writer: Optional[Callable[[Dict], Dict]]=None, 
+        args_reader: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
+        args_writer: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
     ):
 
         self.name = name
         self.manager = manager
 
-        self.kwargs_reader = kwargs_reader if kwargs_reader else CallChannel.default_kwargs_reader 
-        self.kwargs_writer = kwargs_writer if kwargs_writer else CallChannel.default_kwargs_writer
+        self.args_reader = args_reader if args_reader else CallChannel.default_args_reader 
+        self.args_writer = args_writer if args_writer else CallChannel.default_args_writer
 
         # states 
         self.call_pending: ListProxy[Tuple[int, Any]] = manager.list()
@@ -115,15 +117,14 @@ class CallChannel:
         self.call_id = -1
         self.call_semaphore = Semaphore(0)
 
-    def call_no_return(self, **kwargs):
+    def call_no_return(self, *args: P.args, **kwargs: P.kwargs)->None:
         self.call_id += 1 
-        self.call_pending.append((self.call_id, self.kwargs_writer(kwargs)))
+        self.call_pending.append((self.call_id, self.args_writer(args, kwargs)))
         self.call_semaphore.release()
         
-
-    def call(self, **kwargs):
+    def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
         self.call_id += 1 
-        self.call_pending.append((self.call_id, self.kwargs_writer(kwargs)))
+        self.call_pending.append((self.call_id, self.args_writer(args, kwargs)))
 
         lock = self.manager.Lock()
         lock.acquire()
@@ -138,24 +139,22 @@ class CallChannel:
             lock.acquire()
             self.response_locks.pop(this_call_id)
 
-            return self.kwargs_reader(self.res_pending.pop(this_call_id))
+            return self.res_pending.pop(this_call_id) 
 
         return await_result
 
-    def await_and_handle_call(self, handler: Callable[[], Any]):
+    def await_and_handle_call(self, handler: Callable[[Any], Any]):
         self.call_semaphore.acquire()
-        call_id, kwargs = self.call_pending.pop(0)
+        call_id, (args, kwargs) = self.call_pending.pop(0)
         
-        res = handler(**kwargs)
+        res = handler(*args, **kwargs)
 
         l = self.response_locks.get(call_id)
         if l is not None:
-            self.res_pending[call_id] = self.kwargs_writer(res)
+            self.res_pending[call_id] = res
             l.release()
 
-
-
-    def message_handling_loop(self, handler: Callable[[], Any]):
+    def message_handling_loop(self, handler: Callable[[Any], Any]):
         while True:
             self.await_and_handle_call(handler)
 
@@ -166,7 +165,20 @@ class CallChannel:
         t.start()
         return t
 
-#
+def declare_call_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChannel[P, T]:
+    """
+    for type check purposes only
+    this function won't work if it is defined within the CallChannel class.
+    """
+    return obj
+
+# def tester(x:int, y:str)-> int:
+#     return x+int(y)
+
+# x = CallChannel('test', Manager())
+
+# x = declare_call_handler(x, tester)
+# x.call_type_check(1, y='2', j=2)
 
 def loop_func(func, ideal_interval):
     while True:
@@ -178,6 +190,8 @@ def loop_func(func, ideal_interval):
         if itv_to_sleep <= 0:
             warnings.warn("the real interval is >= ideal_interval")
         time.sleep(max(0, itv_to_sleep))
+
+
 
 
 class ComponentInterface:
@@ -222,8 +236,8 @@ def component():
 
 
 def rpc(
-    kwargs_reader: Optional[Callable[[Any], Any]] = None, 
-    kwargs_writer: Optional[Callable[[Any], Any]] = None
+    args_reader: Optional[Callable[[Any], Any]] = None, 
+    args_writer: Optional[Callable[[Any], Any]] = None
 ) -> Callable[[Callable], Callable]:
     
     def dec(func: Callable[[Any, Any], Any]):
@@ -236,8 +250,8 @@ def rpc(
         getattr(func, "roles").append("rpc")
 
         
-        setattr(func, "kwargs_reader", kwargs_reader)
-        setattr(func, "kwargs_writer", kwargs_writer)
+        setattr(func, "args_reader", args_reader)
+        setattr(func, "args_writer", args_writer)
 
         return func 
 
@@ -393,7 +407,7 @@ def create_component_starter(
     # create a message channel for each method with @rpc, identified by function name
     for f in component_class.rpc_list:
         
-        chan = CallChannel(f.__qualname__, manager, f.kwargs_reader, f.kwargs_writer) 
+        chan = CallChannel(f.__qualname__, manager, f.args_reader, f.args_writer) 
         incoming_rpcs[f.__name__] = chan
 
         
