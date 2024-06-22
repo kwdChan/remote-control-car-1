@@ -1,5 +1,5 @@
 from pickle import NONE
-from typing import List, Dict, Literal, Union, Tuple, Any, Optional
+from typing import List, Dict, Literal, TypedDict, Union, Tuple, Any, Optional
 import datetime, time
 from typing_extensions import deprecated, override 
 import numpy as np 
@@ -11,9 +11,8 @@ from data_collection.data_collection import LoggerSet, Logger
 from dataclasses import dataclass
 
 
-from components import component, sampler, samples_producer, event_handler, rpc
-from components import EventBroadcaster, ComponentInterface, MessageChannel
-from components.logger import increment_index_event, log_event, log_time_event
+from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent
 
 import numpy as np
 from typing import Dict, List
@@ -25,9 +24,10 @@ def setup_pwm(pin, freq=300) -> GPIO.PWM: #type: ignore
     return GPIO.PWM(pin, freq)  #type: ignore
 
 
-@component({'logging':None})
+@component
 class TwoWheelsV3(ComponentInterface):
-    def __init__(self, ch_left: GPIO.PWM, ch_right: GPIO.PWM, logging: EventBroadcaster, name):
+
+    def __init__(self, ch_left: GPIO.PWM, ch_right: GPIO.PWM, name, log:CallChannel, increment_index:CallChannel):
 
         ch_left.start(0)
         ch_right.start(0)
@@ -35,8 +35,12 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_left = ch_left
         self.ch_right = ch_right
 
-        self.logging = logging
+        self.log = declare_method_handler(log, LoggerComponent.log)
+        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
+
         self.name = name
+
+    @loop
     @sampler
     def step(
         self, 
@@ -53,8 +57,8 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_left.ChangeDutyCycle(left)
         self.ch_right.ChangeDutyCycle(right)
 
-        increment_index_event(self.logging, self.name)
-        log_event(self.logging, self.name,  dict(left=left, right=right))
+        self.increment_index.call_no_return(self.name)
+        self.log.call_no_return(self.name, dict(left=left, right=right))
         
   
     @classmethod
@@ -63,8 +67,8 @@ class TwoWheelsV3(ComponentInterface):
         left_pin, 
         right_pin, 
         dir_pins: Tuple[int, int],
-        logging: EventBroadcaster,
         name,  
+        log:CallChannel, increment_index:CallChannel
     ):
 
         ch_left = setup_pwm(left_pin, freq=300)
@@ -77,8 +81,7 @@ class TwoWheelsV3(ComponentInterface):
         GPIO.output(dir_pins[0], 0) #type: ignore
         GPIO.output(dir_pins[1], 0) #type: ignore
 
-
-        return cls(ch_left, ch_right, logging, name)
+        return cls(ch_left, ch_right, name, log=log, increment_index=increment_index)
 
 
 

@@ -18,9 +18,9 @@ from ahrs import Quaternion
 #from components import Component, shared_value
 
 
-from components import component, sampler, samples_producer, event_handler, rpc
-from components import EventBroadcaster, ComponentInterface, MessageChannel
-from components.logger import increment_index_event, log_event, log_time_event
+
+from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent
 
 # @component(dict(logging=None))
 # class AngularSpeedControlV3(ComponentInterface):
@@ -28,18 +28,22 @@ from components.logger import increment_index_event, log_event, log_time_event
 #         pass
 
 
-@component(dict(logging=None))
+@component
 class OrientationTrackerV3(ComponentInterface):
     #initial_ori: Any
-    def __init__(self, device: mpu6050.MPU6050, logging: EventBroadcaster, name="OrientationTrackerV3"):
+    def __init__(self, device: mpu6050.MPU6050, log, log_time, increment_index, name="OrientationTrackerV3"):
         self.device = device
         self.madgwick = Madgwick()
-        self.logging = logging
+
+        self.log = declare_method_handler(log, LoggerComponent.log)
+        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
+        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
+
+
         self.name = name 
         self.initial_ori, self.gyro_bias = self.get_initial_orientation_and_gyro_bias(device)
 
-        log_event(
-            self.logging, 
+        self.log.call_no_return(
             self.name, 
             dict(
                 initial_ori=self.initial_ori, 
@@ -51,11 +55,11 @@ class OrientationTrackerV3(ComponentInterface):
         self.t_last = time.monotonic()
         self.last_ori = self.initial_ori
     
-
-    @sampler # TODO: have another decorator for running the method at a set interval
-    @samples_producer(['d', 'd', 'd', 'd'],[0, 0, 0, 0])
-    def step(self):
-        increment_index_event(self.logging, self.name)
+    @samples_producer(typecodes=['d', 'd', 'd', 'd'], default_values=[0, 0, 0, 0])
+    @loop
+    def step(self, increment=True):
+        if increment: 
+            self.increment_index.call_no_return(self.name)
 
         new_time = time.monotonic()
         self.madgwick.Dt =  new_time - self.t_last
@@ -68,24 +72,22 @@ class OrientationTrackerV3(ComponentInterface):
         acc = np.array(acc) # TODO: does not exist in the old version
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
 
-        log_time_event(self.logging, self.name, "time_OrientationTracker",)
-        log_event(
-            self.logging, 
-            self.name,
-            dict(
+        self.log_time.call_no_return(self.name, "time_OrientationTracker")
+
+        self.log.call_no_return(
+            self.name, dict(
                 q = new_ori, 
                 linear_acc = acc, 
-            ), 
+                ), 
             )
-
         self.last_ori = new_ori
 
 
         return new_ori[0], new_ori[1], new_ori[2], new_ori[3]  #, gyr, acc
 
 
-    @classmethod
-    def get_initial_orientation_and_gyro_bias(cls, device, sec=1) -> Tuple[np.ndarray, np.ndarray]:
+    @staticmethod
+    def get_initial_orientation_and_gyro_bias(device, sec=1) -> Tuple[np.ndarray, np.ndarray]:
 
         def calculate(static_acc):
             ref = np.array([0, 0, 1])
@@ -107,14 +109,18 @@ class OrientationTrackerV3(ComponentInterface):
         gyro_bias = np.array(gyros).mean(0)
         return initial_q, gyro_bias
 
-@component(dict(logging=None))
+@component
 class AngularSpeedControlV3(ComponentInterface):
-    def __init__(self, ori_tracker: OrientationTrackerV3, logging: EventBroadcaster, name='AngularSpeedControlV3'):
+    def __init__(self, ori_tracker: OrientationTrackerV3, log, log_time, increment_index, name='AngularSpeedControlV3'):
         #assert isinstance(ori_tracker, OrientationTrackerV3)
 
         self.ori_tracker = ori_tracker
         self.ori0 = Quaternion(ori_tracker.initial_ori) 
-        self.logging = logging
+
+
+        self.log = declare_method_handler(log, LoggerComponent.log)
+        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
+        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
         self.name=name
 
@@ -124,7 +130,7 @@ class AngularSpeedControlV3(ComponentInterface):
         self.last_angle = 0
         self.current_proportion = 0.5
 
-    @samples_producer(['d', 'd'], [0, 0])
+    @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
     @sampler
     def step(
         self, 
@@ -133,9 +139,9 @@ class AngularSpeedControlV3(ComponentInterface):
         reset_target_orientation=False, 
     ) -> Tuple[float, float]:
 
-        increment_index_event(self.logging, self.name)
+        self.increment_index.call_no_return(self.name)
 
-        ori = Quaternion(self.ori_tracker.step()) 
+        ori = Quaternion(self.ori_tracker.step(increment=False))  # type: ignore ???? Quaternion cannot take Tuple??
         
 
         this_t = time.monotonic() 
@@ -179,9 +185,10 @@ class AngularSpeedControlV3(ComponentInterface):
         self.last_angle = angle 
         self.current_proportion = new_proportion
 
+        self.log_time.call_no_return(
+             self.name, "time_AngularSpeedControl"
+        )
 
-
-        log_time_event(self.logging,  self.name, "time_AngularSpeedControl",)
         data = dict(
             angle_diff = angle_diff, 
             axis = axis, # type:ignore # why is pyright complaining?? 
@@ -195,14 +202,14 @@ class AngularSpeedControlV3(ComponentInterface):
             warn = warn, 
             angular_velocity = angular_velocity, 
         )
-        log_event(self.logging, self.name, data)
+        self.log.call_no_return(self.name, data)
 
         return left, right
         
     @classmethod
     def entry(
         cls, 
-        logging:EventBroadcaster,
+        log, log_time, increment_index,
         i2c_address=0x68, 
         bus_num=1,
         name = "AngularSpeedControlV3", 
@@ -213,8 +220,8 @@ class AngularSpeedControlV3(ComponentInterface):
 
         name = "AngularSpeedControlV3"
 
-        tracker = OrientationTrackerV3(device, logging=logging, name=name)
-        control = cls(tracker, logging=logging, name=name)
+        tracker = OrientationTrackerV3(device, log, log_time, increment_index, name=name)
+        control = cls(tracker, log, log_time, increment_index, name=name)
         return control
 
 
