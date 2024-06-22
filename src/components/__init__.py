@@ -1,7 +1,7 @@
 
 from enum import Enum
 import time
-from typing import Callable, Generic, Tuple, TypeVar, TypedDict, cast, get_origin, get_args, Union, Any, Optional, Dict, List
+from typing import Callable, Concatenate, Generic, Tuple, TypeVar, TypedDict, cast, get_origin, get_args, Union, Any, Optional, Dict, List
 import threading
 
 from multiprocessing import Value, Process
@@ -29,6 +29,18 @@ import array
 P = ParamSpec('P')
 T = TypeVar('T')
 F = TypeVar('F', bound=Callable)
+
+def create_thread(_target: Callable[P, T], *args: P.args, **kwargs: P.kwargs):
+    """
+    start a thread with type check
+    """
+    return threading.Thread(target=_target, args=args, kwargs=kwargs)
+
+def create_process(_target: Callable[P, T], *args: P.args, **kwargs: P.kwargs):
+    """
+    start a process with type check
+    """
+    return Process(target=_target, args=args, kwargs=kwargs)
 
 def get_switch(v1: Callable[[], T], v2: Callable[[], T], use1: Callable[[], bool]) -> Callable[[], T]:
 
@@ -123,6 +135,11 @@ class CallChannel(Generic[P, T]):
         self.call_semaphore.release()
         
     def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
+        """
+        TODO: this function must not be used if the return will not be assessed
+        the locks and return values will sit there indefinately and accumulate
+
+        """
         self.call_id += 1 
         self.call_pending.append((self.call_id, self.args_writer(args, kwargs)))
 
@@ -143,30 +160,39 @@ class CallChannel(Generic[P, T]):
 
         return await_result
 
-    def await_and_handle_call(self, handler: Callable[[Any], Any]):
+    def await_and_handle_call(self, handler: Callable[P, T]):
         self.call_semaphore.acquire()
         call_id, (args, kwargs) = self.call_pending.pop(0)
         
-        res = handler(*args, **kwargs)
+        res = handler(*args, **kwargs) # type: ignore
 
         l = self.response_locks.get(call_id)
         if l is not None:
             self.res_pending[call_id] = res
             l.release()
 
-    def message_handling_loop(self, handler: Callable[[Any], Any]):
+    def message_handling_loop(self, handler: Callable[P, T]):
         while True:
             self.await_and_handle_call(handler)
 
-    def start_message_handling_thread(self, handler: Callable[[Any], Any]):
+    def start_message_handling_thread(self, handler: Callable[P, T]):
         # TODO: saving t to self.t may make the object unpickleable?
         # TODO: have a pool of threads to consume the messages as fast as possible 
-        t = threading.Thread(target=self.message_handling_loop, kwargs=dict(handler=handler))
+        t = create_thread(self.message_handling_loop, handler=handler)
         t.start()
         return t
 
-def declare_call_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChannel[P, T]:
+def declare_function_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChannel[P, T]:
     """
+    for type check purposes only
+    this function won't work if it is defined within the CallChannel class.
+    """
+    return obj
+
+def declare_method_handler(obj:CallChannel, method: Callable[Concatenate[Any, P], T]) ->  CallChannel[P, T]:
+    """
+    ignore the first argment of the callable
+
     for type check purposes only
     this function won't work if it is defined within the CallChannel class.
     """
@@ -178,9 +204,14 @@ def declare_call_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChannel[
 # x = CallChannel('test', Manager())
 
 # x = declare_call_handler(x, tester)
-# x.call_type_check(1, y='2', j=2)
+# x.call(1, y="1")
+# x.call(1, y=1)
+# x.call(1, y=1, j=1)
+# x.call(1)
 
-def loop_func(func, ideal_interval):
+
+
+def loop_func(func:Callable, ideal_interval: float):
     while True:
         st = time.monotonic()
         func()
@@ -193,54 +224,47 @@ def loop_func(func, ideal_interval):
 
 
 
+class HandlerRoles(TypedDict):
+    rpc: list[Callable]
+    sampler: list[Callable]
+    sample_producer: list[Callable]
+    loop: list[Callable]
+
+
 
 class ComponentInterface:
-    rpc_list = []
-    samplers = []
-    sample_producers = []
+    handler_roles: HandlerRoles = HandlerRoles(rpc=[], sampler=[], sample_producer=[], loop=[])
+
 
 ComponentSubtype = TypeVar('ComponentSubtype', bound=ComponentInterface)
 
-def component():
+def component(cls: Type[ComponentSubtype]):    
     """
-    """
+    decorators
+
+    THESE METHODS ARE TAGED TO BE WARPPED AND THE FUNCTION SIGNATURES MAY CHANGE
     
-    def dec(cls: Type[ComponentSubtype]):    
 
-        cls.rpc_list = []
-        
-        cls.samplers = []
-        cls.sample_producers = []
+    """
+    possible_roles = cls.handler_roles.keys()
 
-        for k, v in cls.__dict__.items():
-            if not hasattr(v, "handler_type"): continue
+    # iterate through each method with "roles" 
+    for func in cls.__dict__.values():
+        if not hasattr(func, "roles"): continue
 
-            
-            if v.handler_type == 'rpc':
-                cls.rpc_list.append(v)
+        for role in possible_roles: 
+            if role in func.roles:
+                cls.handler_roles[role].append(func)
 
-            elif v.handler_type == 'sample-related':
-                if 'sampler' in v.roles:
-                    cls.samplers.append(v)
-
-                if 'sample-producer' in v.roles:
-                    cls.sample_producers.append(v)
-            else:
-                raise NotImplementedError
-
-            if len(cls.sample_producers) >1:
-                raise NotImplementedError
-
-        return cls
-    return dec
+    return cls
 
 
 def rpc(
     args_reader: Optional[Callable[[Any], Any]] = None, 
     args_writer: Optional[Callable[[Any], Any]] = None
-) -> Callable[[Callable], Callable]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     
-    def dec(func: Callable[[Any, Any], Any]):
+    def dec(func: Callable[P, T]):
         """
         the CallChannel is instantiated by this component and passed on to the other components
         """
@@ -261,8 +285,7 @@ def rpc(
 
 SampleReader = Callable[[], Any]
 SampleWriter = Callable[[Any], None]
-
-SampleSetupFunction = Callable[[List[Any], List[Any]], Tuple[List[SampleReader], List[SampleWriter]]]
+SampleSetupFunction = Callable[Concatenate[List[Any], List[Any], P], Tuple[List[SampleReader], List[SampleWriter]]]
 
 def numpy_sample_setup(typecodes, default_values): 
     readers, writers = [], []
@@ -276,30 +299,30 @@ def numpy_sample_setup(typecodes, default_values):
 
     return readers, writers
 
-# TODO: this requires the shape of the array to be pre-defined in the decorator, which is not ideal 
-def samples_producer(typecodes:List[Any], default_values:List[Any], setup_function:SampleSetupFunction=numpy_sample_setup):
 
-    def setup(): 
-        return setup_function(typecodes, default_values)
+# TODO: this requires the shape of the array to be pre-defined in the decorator, which is not ideal 
+def samples_producer(setup_function:Callable[..., Tuple[List[SampleReader], List[SampleWriter]]]=numpy_sample_setup, **partial_kwargs):
+    """
+    defer parameter specification 
+    """
+    def setup(**kwargs): 
+        kwargs = dict(**partial_kwargs, **kwargs)
+        return setup_function(**kwargs)
         
-    def dec(func: Callable): 
+    def dec(func: Callable[P, T]) -> Callable[P, T]: 
 
         setattr(func, "setup_func", setup)
 
         if not hasattr(func, "roles"):
             setattr(func, "roles", [])
-        getattr(func, "roles").append("sample-producer")
+        getattr(func, "roles").append("sample_producer")
         
         return func
 
     return dec
 
 
-def sampler(func: Callable):
-    """
-    TODO: 
-    """
-
+def sampler(func: Callable[P, T]) -> Callable[P, T]:
     if not hasattr(func, "roles"):
         setattr(func, "roles", [])
     getattr(func, "roles").append("sampler")
@@ -330,10 +353,11 @@ def sample_producer_wrapper(func: Callable, sampler_writers: List[SampleWriter])
     return wrapped_func
 
 
-def loop(func: Callable):
+def loop(func: Callable[P, T])->Callable[P, T]:
     if not hasattr(func, "roles"):
         setattr(func, "roles", [])
     getattr(func, "roles").append("loop")
+    return func 
         
 
 def target(
@@ -346,173 +370,118 @@ def target(
     outgoing_sample_writers: List[Callable[[Any], None]],
     outgoing_rpcs:Dict[str, CallChannel], 
 
-    loop: Callable[[Callable], None], 
-    loop_kwargs, 
-    init_kwargs, 
+    loop_intervals:Dict[str, float], 
+    init_kwargs:Dict, 
     ):
 
-    obj = instantiater(**init_kwargs, **outgoing_rpcs)
+    obj = instantiater(**outgoing_rpcs, **init_kwargs)
 
     ## all the wrapping 
     # wrap the sampler 
-    for f in component_class.samplers:
+    for f in component_class.handler_roles['sampler']:
         method = getattr(obj, f.__name__)
         setattr(obj, f.__name__, sampler_wrapper(method, incoming_sample_readers))
 
     # wrap the sample producer
-    for f in component_class.sample_producers:
+    for f in component_class.handler_roles['sample_producer']:
         method = getattr(obj, f.__name__)
         setattr(obj, f.__name__, sample_producer_wrapper(method, outgoing_sample_writers))
 
 
     ## all the triggers
-
     # the rpc (set up after the wrapping)
     for name, chan in incoming_rpcs.items():
         chan.start_message_handling_thread(getattr(obj, name))
 
-    # TODO: set interval trigger 
+    # loops 
+    for f in component_class.handler_roles['loop']:
+        t = create_thread(loop_func, func=getattr(obj, f.__name__), ideal_interval=loop_intervals[f.__name__])
+        t.start()
 
-    
-    
+class ComponentStarter:
+    def __init__(
+        self, 
+        component_class:Type[ComponentInterface], 
+        manager: SyncManager, 
+        loop_intervals: Dict[str, float]={}, 
+        instantiator=None, 
+        init_kwargs={}, 
+        sample_setup_kwargs = {}
+        ):
+        """
 
-
-def create_component_starter(
-    component_class:Type[ComponentInterface], 
-    manager: SyncManager, 
-    loop, init_kwargs, loop_kwargs, instantiater=None
-    ):
-    """
-    1. create a message channel for each method with @rpc, identified by function name
-    2. create a event broadcaster for each event named by @component TODO: may create a @event_producer decorator
-    3. create a list of readers and writers of the samples using the setup function attached by @sample_producer
-
-
-    Expect:
-    1. message channel for rpc of the other component, matached to the name of the variable in the instantiator 
-    2. a list of sample readers, matched by argument position of the method with @sampler
-    3. 
-
-    """
+        """
 
 
-
-    assert hasattr(component_class, "rpc_list")
-    assert hasattr(component_class, "event_handlers")
-    assert hasattr(component_class, "events_to_produce")
-    
-    incoming_rpcs: Dict[str, CallChannel] = {}
+        incoming_rpcs: Dict[str, CallChannel] = {}
 
 
-    # create a message channel for each method with @rpc, identified by function name
-    for f in component_class.rpc_list:
-        
-        chan = CallChannel(f.__qualname__, manager, f.args_reader, f.args_writer) 
-        incoming_rpcs[f.__name__] = chan
-
-        
-    #component_class.samplers
-    
-    if len(component_class.sample_producers) > 1:
-        raise NotImplementedError
-
-    if len(component_class.sample_producers): 
-        sample_producer = component_class.sample_producers[0]
-
-        assert hasattr(sample_producer, "setup_func")
-        outgoing_value_samplers, outgoing_value_assigners = sample_producer.setup_func()
-
-    else: 
-        outgoing_value_samplers, outgoing_value_assigners = [], []
-
-
-    # this feels so wrong haha
-    class ComponentStarter:
-        def __init__(self, outgoing_value_samplers, incoming_rpc) :
-            self.process: Process
-
-
-            self.incoming_rpc: Dict[str, CallChannel] = incoming_rpc
-            self.outgoing_samples:List[SampleReader] = outgoing_value_samplers
-
-
-            self.outgoing_rpc: Dict[str, CallChannel] = {}
-            self.incoming_samples:List[SampleReader] = []
-
-        def start(self):
-
-
-            self.process = Process(
-            target=target, 
-            kwargs=dict(
-                component_class = component_class, 
-                instantiater = instantiater if instantiater else component_class, 
-                incoming_value_samplers=self.incoming_samples, 
-
-                incoming_rpcs=incoming_rpcs, 
-                outgoing_value_assigners=outgoing_value_assigners, 
-                outgoing_rpcs=self.outgoing_rpc, 
-
-                loop=loop, 
-                loop_kwargs=loop_kwargs, 
-                init_kwargs=init_kwargs,
-                )
-            )
-            self.process.start()
-
-
-        def register_outgoing_rpc(self, outgoing_rpc):
-            self.outgoing_rpc = outgoing_rpc
-
-
-        def register_incoming_samples(self, incoming_samples: List[SampleReader]):
-            self.incoming_samples = incoming_samples 
+        # create a message channel for each method with @rpc, identified by function name
+        for f in component_class.handler_roles['rpc']:
+            
+            chan = CallChannel(f.__qualname__, manager, getattr(f, "args_reader"), getattr(f, "args_writer")) 
+            incoming_rpcs[f.__name__] = chan
 
             
-    starter = ComponentStarter(outgoing_value_samplers, incoming_rpcs)
+        #component_class.samplers
+        if len(component_class.handler_roles['sample_producer']) > 1:
+            raise NotImplementedError
 
-    return starter
+        if len(component_class.handler_roles['sample_producer']): 
+            sample_producer = component_class.handler_roles['sample_producer'][0]
 
+            assert hasattr(sample_producer, "setup_func")
+            setup_func = getattr(sample_producer, "setup_func")
+            outgoing_sampler_readers, outgoing_sample_writers = setup_func(**sample_setup_kwargs)
 
-
-@component()
-class MyTestComponent(ComponentInterface):
-    def __init__(self):
-        self.idx = -1
-
-    @samples_producer(['d', 'd'], [0, np.zeros((4,4))])
-    @sampler
-    def step(self, idx_other, arr_other):
-        self.idx += 1
-
-        
-        return self.idx, np.random.random((4,4)) # type: ignore
-        
+        else: 
+            outgoing_sampler_readers, outgoing_sample_writers = [], []
 
 
 
-    @rpc()
-    def com1_rpc(self, msg):
+        # states 
+        self.__component_class = component_class
+        self.__instantiator = instantiator if instantiator else component_class
+        self.__init_kwargs = init_kwargs
+        self.__loop_intervals = loop_intervals
 
-        print(f'com1 received msg: {msg}', flush=True)
+        self.incoming_rpcs = incoming_rpcs
+        self.outgoing_sample_readers = outgoing_sampler_readers
 
-        return msg
 
 
-def testing_function():
-    m = Manager()
+        self.__outgoing_sample_writers = outgoing_sample_writers
+        self.__outgoing_rpcs: Dict[str, CallChannel]
+        self.__incoming_sample_readers: List[SampleReader]
+        self.process = None
 
-    sample_reader, sample_writer = numpy_sample_setup(['d', 'd'], [0, np.zeros((4,4))])
-    
-    starter1 = create_component_starter(
 
-        MyTestComponent, manager=m, loop=loop, init_kwargs={}, loop_kwargs={'ideal_interval': 1}, instantiater=None
-    )
 
-    starter1.register_incoming_samples(sample_reader)
-    starter1.register_outgoing_rpc({})
-    
-    starter1.start()
 
-    return starter1, sample_writer
+    def register_outgoing_rpc(self, outgoing_rpcs: Dict[str, CallChannel]):
+        self.__outgoing_rpcs = outgoing_rpcs
+
+
+    def register_incoming_samples(self, incoming_samples: List[SampleReader]):
+        self.__incoming_sample_readers = incoming_samples 
+
+    def get_outgoing_sample_writers(self):
+        return self.__outgoing_sample_writers
+
+
+    def start(self):
+        assert self.process is None, "already started"
+        self.process = create_process(
+            target, 
+            component_class=self.__component_class,
+            instantiater=self.__instantiator,
+            incoming_sample_readers= self.__incoming_sample_readers, 
+            incoming_rpcs= self.incoming_rpcs, 
+            outgoing_sample_writers= self.__outgoing_sample_writers, 
+            outgoing_rpcs= self.__outgoing_rpcs, 
+            loop_intervals = self.__loop_intervals, 
+            init_kwargs= self.__init_kwargs
+            )
+        self.process.start()
+
 
