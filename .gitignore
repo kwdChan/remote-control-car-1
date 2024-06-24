@@ -10,3 +10,4 @@ venv
 src/training/data
 src/training/logs
 tg_token.py
+venv*
