@@ -10,6 +10,8 @@ from components.gyroscope.gyroscope import AngularSpeedControlV3
 from components.camera import Picamera2V2
 from data_collection.data_collection import LoggerSet
 from multiprocessing import Manager
+import RPi.GPIO as GPIO
+GPIO.setmode(GPIO.BOARD)
 
 
 loggerset = LoggerSet("../log/test")

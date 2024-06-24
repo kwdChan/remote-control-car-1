@@ -105,7 +105,6 @@ class CallChannel(Generic[P, T]):
     def default_args_writer(args:Tuple, kwargs:Dict):
         return args, kwargs
 
-
     def __init__(
         self, 
         name, 
@@ -151,7 +150,7 @@ class CallChannel(Generic[P, T]):
             lock.acquire()
             self.response_locks[self.call_id.value] = lock
             
-            # CANNOT RELEASE THE LOCK BEFORE THE self.response_locks[self.call_id] IS SET
+            # CANNOT RELEASE BEFORE THE self.response_locks[self.call_id] IS SET
             self.call_semaphore.release()
 
             this_call_id = self.call_id.value
