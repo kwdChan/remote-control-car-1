@@ -126,13 +126,16 @@ class CallChannel(Generic[P, T]):
 
         self.response_locks: DictProxy[int, Any] = manager.dict()
 
-        self.call_id = -1
+        self.call_id = Value('L', -1)
         self.call_semaphore = Semaphore(0)
+        self.call_lock = Lock()
 
     def call_no_return(self, *args: P.args, **kwargs: P.kwargs)->None:
-        self.call_id += 1 
-        self.call_pending.append((self.call_id, self.args_writer(args, kwargs)))
-        self.call_semaphore.release()
+        
+        with self.call_lock: 
+            self.call_id.value += 1 
+            self.call_pending.append((self.call_id.value, self.args_writer(args, kwargs)))
+            self.call_semaphore.release()
         
     def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
         """
@@ -140,17 +143,19 @@ class CallChannel(Generic[P, T]):
         the locks and return values will sit there indefinately and accumulate
 
         """
-        self.call_id += 1 
-        self.call_pending.append((self.call_id, self.args_writer(args, kwargs)))
+        with self.call_lock: 
+            self.call_id.value += 1 
+            self.call_pending.append((self.call_id.value, self.args_writer(args, kwargs)))
 
-        lock = self.manager.Lock()
-        lock.acquire()
-        self.response_locks[self.call_id] = lock
-        
-        # CANNOT RELEASE THE LOCK BEFORE THE self.response_locks[self.call_id] IS SET
-        self.call_semaphore.release()
+            lock = self.manager.Lock()
+            lock.acquire()
+            self.response_locks[self.call_id.value] = lock
+            
+            # CANNOT RELEASE THE LOCK BEFORE THE self.response_locks[self.call_id] IS SET
+            self.call_semaphore.release()
 
-        this_call_id = self.call_id
+            this_call_id = self.call_id.value
+
         def await_result():
 
             lock.acquire()
@@ -246,7 +251,8 @@ def component(cls: Type[ComponentSubtype]):
     
 
     """
-    possible_roles = cls.handler_roles.keys()
+    possible_roles = list(cls.handler_roles.keys()).copy()
+    cls.handler_roles = HandlerRoles(rpc=[], sampler=[], sample_producer=[], loop=[])
 
     # iterate through each method with "roles" 
     for func in cls.__dict__.values():
@@ -289,6 +295,8 @@ SampleSetupFunction = Callable[Concatenate[List[Any], List[Any], P], Tuple[List[
 
 def numpy_sample_setup(typecodes, default_values): 
     readers, writers = [], []
+
+    assert isinstance(default_values, list) or isinstance(default_values, tuple) 
     for tc, dv in zip(typecodes, default_values):
         if isinstance(dv, np.ndarray): 
             r, w = shared_np_array_v2(tc, dv)
@@ -300,6 +308,7 @@ def numpy_sample_setup(typecodes, default_values):
     return readers, writers
 
 
+
 # TODO: this requires the shape of the array to be pre-defined in the decorator, which is not ideal 
 def samples_producer(setup_function:Callable[..., Tuple[List[SampleReader], List[SampleWriter]]]=numpy_sample_setup, **partial_kwargs):
     """
@@ -309,7 +318,7 @@ def samples_producer(setup_function:Callable[..., Tuple[List[SampleReader], List
         kwargs = dict(**partial_kwargs, **kwargs)
         return setup_function(**kwargs)
         
-    def dec(func: Callable[P, T]) -> Callable[P, T]: 
+    def dec(func: Callable[P, Tuple]) -> Callable[P, Tuple]: 
 
         setattr(func, "setup_func", setup)
 
@@ -337,16 +346,10 @@ def sampler_wrapper(func: Callable, args: List[SampleReader]=[], kwargs: Dict[st
         return func(*args_realised, **kwargs_realised)
     return wrapped_func
 
-def sample_producer_wrapper(func: Callable, sampler_writers: List[SampleWriter]):
+def sample_producer_wrapper(func: Callable[..., Tuple], sampler_writers: List[SampleWriter]):
     def wrapped_func(*args, **kwargs):
         return_values = func(*args, **kwargs)
 
-        if not len(sampler_writers):
-            return_values = () 
-
-        if len(sampler_writers)==1:
-            return_values = (return_values,)
-        
         for w, v in zip(sampler_writers, return_values):
             w(v)
     
@@ -384,7 +387,7 @@ def target(
 
     # wrap the sample producer
     for f in component_class.handler_roles['sample_producer']:
-        method = getattr(obj, f.__name__)
+        method = getattr(obj, f.__name__) # f would be just the method before the sampler wrap
         setattr(obj, f.__name__, sample_producer_wrapper(method, outgoing_sample_writers))
 
 
@@ -451,8 +454,8 @@ class ComponentStarter:
 
 
         self.__outgoing_sample_writers = outgoing_sample_writers
-        self.__outgoing_rpcs: Dict[str, CallChannel]
-        self.__incoming_sample_readers: List[SampleReader]
+        self.__outgoing_rpcs: Dict[str, CallChannel] = {}
+        self.__incoming_sample_readers: List[SampleReader] =[]
         self.process = None
 
 
