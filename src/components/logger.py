@@ -22,28 +22,20 @@ class LoggerComponent(ComponentInterface):
             self.loggers[name] = self.loggerset.get_logger(name, save_interval=15)
         return self.loggers[name]
 
-    @rpc()
-    def increment_index(self, name:str):
-
-        logger = self.get_create_logger(name)
-
-        logger.increment_idx()
-        logger.log_time()
 
     @rpc() 
-    def log(self, name:str, data:Dict):
+    def log(self, name:str, data:Dict, time_key='', increment_index:bool=False):
 
         logger = self.get_create_logger(name)
+
+        if increment_index: 
+            logger.increment_idx()
+
+        if time_key: 
+            logger.log_time(time_key)
 
         for k, v in data.items():
             logger.log(k, v)
-
-    @rpc()
-    def log_time(self, name:str, key:str):
-
-        logger = self.get_create_logger(name)
-
-        logger.log_time(key)
 
     @rpc()
     def setup_video_saver(self, name:str, resolution:Tuple[int, int], **kwargs):
@@ -56,4 +48,6 @@ class LoggerComponent(ComponentInterface):
         logger = self.get_create_logger(name)
         logger.save_video_frame(frame)
 
-        
+    @rpc()
+    def get_logger(self, name: str):
+        return self.loggers[name]

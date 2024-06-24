@@ -4,7 +4,7 @@ import datetime, time
 from typing_extensions import deprecated, override 
 import numpy as np 
 import pandas as pd
-import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO #type: ignore
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
 from data_collection.data_collection import LoggerSet, Logger
@@ -19,15 +19,17 @@ from typing import Dict, List
 from data_collection.data_collection import Logger, LoggerSet
 
 
-def setup_pwm(pin, freq=300) -> GPIO.PWM: #type: ignore
+GPIOPWM = GPIO.PWM #type: ignore
+
+def setup_pwm(pin, freq=300) -> GPIOPWM: 
     GPIO.setup(pin, GPIO.OUT) #type: ignore
-    return GPIO.PWM(pin, freq)  #type: ignore
+    return GPIO.PWM(pin, freq)   #type: ignore
 
 
 @component
 class TwoWheelsV3(ComponentInterface):
 
-    def __init__(self, ch_left: GPIO.PWM, ch_right: GPIO.PWM, name, log:CallChannel, increment_index:CallChannel):
+    def __init__(self, ch_left: GPIOPWM, ch_right: GPIOPWM, name, log:CallChannel):
 
         ch_left.start(0)
         ch_right.start(0)
@@ -36,7 +38,6 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_right = ch_right
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
         self.name = name
 
@@ -57,8 +58,7 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_left.ChangeDutyCycle(left)
         self.ch_right.ChangeDutyCycle(right)
 
-        self.increment_index.call_no_return(self.name)
-        self.log.call_no_return(self.name, dict(left=left, right=right))
+        self.log.call_no_return(self.name, dict(left=left, right=right), 'time')
         
   
     @classmethod
@@ -68,7 +68,7 @@ class TwoWheelsV3(ComponentInterface):
         right_pin, 
         dir_pins: Tuple[int, int],
         name,  
-        log:CallChannel, increment_index:CallChannel
+        log:CallChannel,
     ):
 
         ch_left = setup_pwm(left_pin, freq=300)
@@ -81,7 +81,7 @@ class TwoWheelsV3(ComponentInterface):
         GPIO.output(dir_pins[0], 0) #type: ignore
         GPIO.output(dir_pins[1], 0) #type: ignore
 
-        return cls(ch_left, ch_right, name, log=log, increment_index=increment_index)
+        return cls(ch_left, ch_right, name, log=log)
 
 
 

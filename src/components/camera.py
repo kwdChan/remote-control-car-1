@@ -24,7 +24,7 @@ from libcamera import Transform # type: ignore
 
 @component
 class Picamera2V2(ComponentInterface):
-    def __init__(self, resolution, framerate, log, log_time, increment_index, setup_video_saver, save_video_frame, config_overrides ={},  name="PicameraV2"):
+    def __init__(self, resolution, framerate, log, setup_video_saver, save_video_frame, config_overrides ={},  name="PicameraV2"):
         """
         64 is the minimum it can go in each dimension
 
@@ -34,9 +34,7 @@ class Picamera2V2(ComponentInterface):
         # RPC type check declaration 
         setup_video_saver = declare_method_handler(setup_video_saver, LoggerComponent.setup_video_saver)
         log = declare_method_handler(log, LoggerComponent.log)
-        increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
         save_video_frame = declare_method_handler(save_video_frame, LoggerComponent.save_video_frame)
-        log_time = declare_method_handler(log_time, LoggerComponent.log_time)
         
         # start
         picam2 = Picamera2()
@@ -58,21 +56,20 @@ class Picamera2V2(ComponentInterface):
 
         # RPCs
         self.log = log
-        self.increment_index = increment_index
         self.save_video_frame = save_video_frame
-        self.log_time = log_time
 
     @loop
     @samples_producer(typecodes=['B'])
     def step(self):
-        self.increment_index.call_no_return(self.name)
+        #self.increment_index.call(self.name)() # need to 
         
         img = self.cap.capture_array("main")[:, :, :3] # type: ignore 
 
-        self.log_time.call_no_return(self.name, 'time')
+        self.log.call_no_return(self.name, {}, 'time')
 
         self.save_video_frame.call_no_return(self.name, img)
-        return img
+
+        return (img, )
 
 
 

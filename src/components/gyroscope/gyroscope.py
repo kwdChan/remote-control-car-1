@@ -31,13 +31,11 @@ from components.logger import LoggerComponent
 @component
 class OrientationTrackerV3(ComponentInterface):
     #initial_ori: Any
-    def __init__(self, device: mpu6050.MPU6050, log, log_time, increment_index, name="OrientationTrackerV3"):
+    def __init__(self, device: mpu6050.MPU6050, log, name="OrientationTrackerV3"):
         self.device = device
         self.madgwick = Madgwick()
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
 
         self.name = name 
@@ -58,9 +56,6 @@ class OrientationTrackerV3(ComponentInterface):
     @samples_producer(typecodes=['d', 'd', 'd', 'd'], default_values=[0, 0, 0, 0])
     @loop
     def step(self, increment=True):
-        if increment: 
-            self.increment_index.call_no_return(self.name)
-
         new_time = time.monotonic()
         self.madgwick.Dt =  new_time - self.t_last
         self.t_last = new_time
@@ -72,13 +67,15 @@ class OrientationTrackerV3(ComponentInterface):
         acc = np.array(acc) # TODO: does not exist in the old version
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
 
-        self.log_time.call_no_return(self.name, "time_OrientationTracker")
 
         self.log.call_no_return(
-            self.name, dict(
+            self.name, 
+            dict(
                 q = new_ori, 
                 linear_acc = acc, 
                 ), 
+            "time_OrientationTracker",
+            increment_index = increment, 
             )
         self.last_ori = new_ori
 
@@ -111,7 +108,7 @@ class OrientationTrackerV3(ComponentInterface):
 
 @component
 class AngularSpeedControlV3(ComponentInterface):
-    def __init__(self, ori_tracker: OrientationTrackerV3, log, log_time, increment_index, name='AngularSpeedControlV3'):
+    def __init__(self, ori_tracker: OrientationTrackerV3, log, name='AngularSpeedControlV3'):
         #assert isinstance(ori_tracker, OrientationTrackerV3)
 
         self.ori_tracker = ori_tracker
@@ -119,8 +116,6 @@ class AngularSpeedControlV3(ComponentInterface):
 
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
         self.name=name
 
@@ -130,6 +125,7 @@ class AngularSpeedControlV3(ComponentInterface):
         self.last_angle = 0
         self.current_proportion = 0.5
 
+    @loop
     @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
     @sampler
     def step(
@@ -139,7 +135,6 @@ class AngularSpeedControlV3(ComponentInterface):
         reset_target_orientation=False, 
     ) -> Tuple[float, float]:
 
-        self.increment_index.call_no_return(self.name)
 
         ori = Quaternion(self.ori_tracker.step(increment=False))  # type: ignore ???? Quaternion cannot take Tuple??
         
@@ -185,9 +180,7 @@ class AngularSpeedControlV3(ComponentInterface):
         self.last_angle = angle 
         self.current_proportion = new_proportion
 
-        self.log_time.call_no_return(
-             self.name, "time_AngularSpeedControl"
-        )
+
 
         data = dict(
             angle_diff = angle_diff, 
@@ -202,14 +195,14 @@ class AngularSpeedControlV3(ComponentInterface):
             warn = warn, 
             angular_velocity = angular_velocity, 
         )
-        self.log.call_no_return(self.name, data)
+        self.log.call_no_return(self.name, data, "time_AngularSpeedControl")
 
         return left, right
         
     @classmethod
     def entry(
         cls, 
-        log, log_time, increment_index,
+        log,
         i2c_address=0x68, 
         bus_num=1,
         name = "AngularSpeedControlV3", 
@@ -220,8 +213,8 @@ class AngularSpeedControlV3(ComponentInterface):
 
         name = "AngularSpeedControlV3"
 
-        tracker = OrientationTrackerV3(device, log, log_time, increment_index, name=name)
-        control = cls(tracker, log, log_time, increment_index, name=name)
+        tracker = OrientationTrackerV3(device, log, name=name)
+        control = cls(tracker, log, name=name)
         return control
 
 

@@ -13,11 +13,9 @@ import time
 # work with bluetooth server v2, not v3
 @component
 class BlueToothCarControlSPP_V2(ComponentInterface):
-    def __init__(self, log, log_time, increment_index, name='BlueToothCarControlSPP_V2'):
+    def __init__(self, log, name='BlueToothCarControlSPP_V2'):
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
         
 
         self.name = name
@@ -48,9 +46,6 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
     @samples_producer(typecodes =['d', 'd'], default_values=[0, 0])
     @sampler
     def step(self, data={})->Tuple[float, float]:
-
-        self.log_time.call_no_return(self.name, 'time')
-        self.increment_index.call_no_return(self.name)
 
         
         log_data = {}
@@ -85,9 +80,7 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
         log_data['angular_velocity'] = angular_velocity
         log_data['speed'] = speed
 
-        self.log.call_no_return(self.name, log_data)
-
-
+        self.log.call_no_return(self.name, log_data, 'time')
         return angular_velocity, speed
 
 
