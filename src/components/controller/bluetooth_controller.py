@@ -3,19 +3,19 @@ from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueP
 from typing import Optional, Tuple, TypeVar, Union, List, cast, Dict
 from typing_extensions import deprecated
 
+from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent
 
-from components import component, sampler, samples_producer, event_handler, rpc
-from components import EventBroadcaster, ComponentInterface, MessageChannel
-from components.logger import increment_index_event, log_event, log_time_event
-from data_collection.data_collection import Logger, LoggerSet
+
 import numpy as np 
 import time
 
 # work with bluetooth server v2, not v3
-@component(dict(logging=None))
+@component
 class BlueToothCarControlSPP_V2(ComponentInterface):
-    def __init__(self, logging: EventBroadcaster, name='BlueToothCarControlSPP_V2'):
-        self.logging = logging
+    def __init__(self, log, name='BlueToothCarControlSPP_V2'):
+
+        self.log = declare_method_handler(log, LoggerComponent.log)
         
 
         self.name = name
@@ -42,11 +42,10 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
     def sq_handler(self):
         self.angular_speed -= 22.5
 
-    @samples_producer(['d', 'd'], [0, 0])
+    @loop
+    @samples_producer(typecodes =['d', 'd'], default_values=[0, 0])
     @sampler
     def step(self, data={})->Tuple[float, float]:
-
-        log_time_event(self.logging, self.name, 'time')
 
         
         log_data = {}
@@ -81,9 +80,7 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
         log_data['angular_velocity'] = angular_velocity
         log_data['speed'] = speed
 
-        log_event(self.logging, self.name, log_data)
-
-
+        self.log.call_no_return(self.name, log_data, 'time')
         return angular_velocity, speed
 
 

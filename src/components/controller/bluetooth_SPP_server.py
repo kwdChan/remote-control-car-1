@@ -10,15 +10,16 @@ from multiprocessing import Process
 import sys
 
 
-from components import EventEnum, component, sampler, samples_producer, event_handler, rpc
-from components import EventBroadcaster, ComponentInterface, MessageChannel
-from components.logger import increment_index_event, log_event
+from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent
 
-def start_bluetooth_server_v3(manager: SyncManager):
 
-    event = EventBroadcaster('bluetooth', manager)
+def start_bluetooth_server_v4(call_channels:List[CallChannel[[str], None]]=[]):
+
     def update(message:str):
-        event.publish({'event_type': EventEnum.bluetooth_controller, 'message': message})
+
+        for chan in call_channels:
+            chan.call_no_return(message)
 
     p = Process(
         target=main,
@@ -26,7 +27,7 @@ def start_bluetooth_server_v3(manager: SyncManager):
     )
     p.start()
 
-    return event, p
+    return p
     
 
 

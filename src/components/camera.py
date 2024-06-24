@@ -11,35 +11,35 @@ from multiprocessing import Process
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
 
 
-from components import component, sampler, samples_producer, event_handler, rpc
-from components import EventBroadcaster, ComponentInterface, MessageChannel, EventEnum
-from components.logger import increment_index_event, log_event, log_time_event, setup_video_saver_event
-
-
+from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent
 
 import sys
 sys.path.append("/usr/lib/python3/dist-packages")
 from picamera2 import Picamera2 
 from libcamera import Transform # type: ignore
 
-def video_frame_event(event_broadcaster: EventBroadcaster, name:str, frame):
-    event_broadcaster.publish(dict(event_type=EventEnum.video_frame, name = name, frame=frame))
 
 
 
-
-@component({"logging":None, "frame_event":None})
+@component
 class Picamera2V2(ComponentInterface):
-    def __init__(self, resolution, framerate,  logging: EventBroadcaster, frame_event: EventBroadcaster, config_overrides ={},  name="PicameraV2"):
+    def __init__(self, resolution, framerate, log, setup_video_saver, save_video_frame, config_overrides ={},  name="PicameraV2"):
         """
         64 is the minimum it can go in each dimension
 
         114, 64 
         """
+
+        # RPC type check declaration 
+        setup_video_saver = declare_method_handler(setup_video_saver, LoggerComponent.setup_video_saver)
+        log = declare_method_handler(log, LoggerComponent.log)
+        save_video_frame = declare_method_handler(save_video_frame, LoggerComponent.save_video_frame)
+        
+        # start
         picam2 = Picamera2()
-
-
-        setup_video_saver_event(logging, name, resolution=resolution, framerate=framerate)
+        setup_video_saver.call(name, resolution=resolution, framerate=framerate)
+        
 
         presets = dict( main={"size":resolution, "format": "RGB888"}, queue=False, controls={"FrameDurationLimits": (int(1e6/framerate), int(1e6/framerate))}, transform=Transform(hflip=True, vflip=True), buffer_count=1)
         for k, v in config_overrides.items():
@@ -52,19 +52,24 @@ class Picamera2V2(ComponentInterface):
 
 
         self.cap = picam2
-        self.logging = logging
         self.name = name
-        self.frame_event = frame_event
 
-    @sampler # TODO: sampler 
+        # RPCs
+        self.log = log
+        self.save_video_frame = save_video_frame
+
+    @loop
+    @samples_producer(typecodes=['B'])
     def step(self):
+        #self.increment_index.call(self.name)() # need to 
+        
         img = self.cap.capture_array("main")[:, :, :3] # type: ignore 
 
-        log_time_event(self.logging, self.name, 'time')
+        self.log.call_no_return(self.name, {}, 'time')
 
-        self.frame_event.publish(dict(event_type=EventEnum.video_frame, frame=img, metadata=dict()))
-        
-        video_frame_event(self.logging, self.name, img)
+        self.save_video_frame.call_no_return(self.name, img)
+
+        return (img, )
 
 
 
