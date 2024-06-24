@@ -57,6 +57,8 @@ class LoggerSet:
         return failed
             
             
+
+import threading
 class Logger:
 
     def __init__(self, path: Union[Path, str] ='../log/temp', name='unnamed', save_interval:float=30, overwrite_ok=False):
@@ -88,6 +90,8 @@ class Logger:
         self.idx = 0
         self.last_saved = time.monotonic()
 
+        self.record_lock = threading.Lock()
+
     # def __signal_handler(self, signum, frame):
         
     #     self.save()
@@ -107,21 +111,24 @@ class Logger:
     def increment_idx(self):
         self.idx += 1
 
-    def log_time(self, key='time'):
-        self.log(key, datetime.datetime.now())
+    def log_time(self, key='time', overwrite_index=None):
+        self.log(key, datetime.datetime.now(), overwrite_index)
 
-    def log(self, key, value):
+    def log(self, key, value, overwrite_index=None):
 
         """
         log the value and the current idx
         ideally all values of the same key should have the same structure
         """
+        with self.record_lock: 
+            idx = self.idx if overwrite_index is None else overwrite_index
+            new_record = dict(idx=idx, key=key, value=copy(value))
+            self.records.append(new_record)
 
-        new_record = dict(idx=self.idx, key=key, value=copy(value))
-        self.records.append(new_record)
+        # the lock is only needed here, i guess? 
+            if (time.monotonic() - self.last_saved) >= self.save_interval:
+                self.save()
 
-        if (time.monotonic() - self.last_saved) >= self.save_interval:
-            self.save()
 
     def save(self):
         print(f'saving: {self.name}')
@@ -135,11 +142,11 @@ class Logger:
     def setup_video_saver(self, **kwargs):
         self.video_saver = VideoSaver(self.path/'video', **kwargs)
 
-    def save_video_frame(self, arr):
+    def save_video_frame(self, arr, overwrite_index=None):
         vidx, fidx, monotonic = cast(VideoSaver, self.video_saver).save_frame(arr) 
-        self.log('vidx', vidx)
-        self.log('fidx', fidx)
-        self.log('monotonic', monotonic)
+        self.log('vidx', vidx, overwrite_index)
+        self.log('fidx', fidx, overwrite_index)
+        self.log('monotonic', monotonic, overwrite_index)
         
     def load(self, min_idx=0, max_idx=999):
         data = []
