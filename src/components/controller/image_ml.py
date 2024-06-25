@@ -1,7 +1,7 @@
 from typing import Callable, Optional, List, Any, Tuple
 
 from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
+from components.logger import LoggerComponent, add_time
 
 from pathlib import Path
 import numpy as np 
@@ -10,73 +10,78 @@ import time
 import tensorflow as tf
 import tensorflow.keras as keras # type: ignore 
 from data_collection.data_collection import LoggerSet, Logger
+
 @component
 class ImageMLControllerV3b(ComponentInterface):
 
-    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
+    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, name):
 
         self.model = func()
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
         self.name = name
+
+        self.idx = 0
 
     
     # TODO: add time data and ignore the frames if the handler isn't fast enough
     @rpc()
     @sampler
+    @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
     def step(self, arr:np.ndarray): 
 
-        self.increment_index.call_no_return(self.name)
         t0 = time.monotonic()
+        data = {}
 
-        self.log_time.call_no_return(self.name, 'before')
+        data = add_time(data, 'before')
 
         assert not (arr is None)
 
         v0, v1 = self.model(arr)
         t1 = time.monotonic()
 
-        self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
+        data['timelapsed'] = t1-t0
+
+        self.log.call_no_return(self.name, add_time(data), self.idx)
+        self.idx += 1
         
         return v0, v1
 
 
 
-@component
-class ImageMLControllerV3a(ComponentInterface):
+# @component
+# class ImageMLControllerV3a(ComponentInterface):
 
-    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
+#     def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
 
-        self.model = func()
+#         self.model = func()
 
-        self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
+#         self.log = declare_method_handler(log, LoggerComponent.log)
+#         self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
+#         self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
-        self.name = name
+#         self.name = name
 
     
-    # TODO: add time data and ignore the frames if the handler isn't fast enough
-    @loop
-    @sampler
-    def step(self, arr): 
+#     # TODO: add time data and ignore the frames if the handler isn't fast enough
+#     @loop
+#     @sampler
+#     def step(self, arr): 
 
-        self.increment_index.call_no_return(self.name)
-        t0 = time.monotonic()
+#         self.increment_index.call_no_return(self.name)
+#         t0 = time.monotonic()
 
-        self.log_time.call_no_return(self.name, 'before')
+#         self.log_time.call_no_return(self.name, 'before')
 
-        assert not (arr is None)
+#         assert not (arr is None)
 
-        v0, v1 = self.model(arr)
-        t1 = time.monotonic()
+#         v0, v1 = self.model(arr)
+#         t1 = time.monotonic()
 
-        self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
+#         self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
         
-        return v0, v1
+#         return v0, v1
 
 
 

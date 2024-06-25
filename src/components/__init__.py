@@ -1,7 +1,7 @@
 
 from enum import Enum
 import time
-from typing import Callable, Concatenate, Generic, Tuple, TypeVar, TypedDict, cast, get_origin, get_args, Union, Any, Optional, Dict, List
+from typing import Callable, Concatenate, Generic, Literal, Tuple, TypeVar, TypedDict, cast, get_origin, get_args, Union, Any, Optional, Dict, List
 import threading
 
 from multiprocessing import Value, Process
@@ -13,7 +13,7 @@ from threading import Lock as ThreahingLock
 
 
 
-from multiprocessing import Semaphore, Lock
+from multiprocessing import Semaphore, Lock, Condition
 from multiprocessing.synchronize import Lock as LockType, Semaphore as SemaphoreType
 from multiprocessing.managers import BaseProxy, BaseManager, SyncManager, ListProxy, DictProxy
 
@@ -94,8 +94,110 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
 
     return reader, assigner
 
-#TODO: ParamSpec is not implemented on python 3.9 that pi uses
+
+
+class CallChannelV2(Generic[P, T]):
+    """
+    #TODO: testing
+    """
+
+    @staticmethod
+    def default_args_reader(args:Tuple, kwargs:Dict):
+        return args, kwargs
+
+    @staticmethod
+    def default_args_writer(args:Tuple, kwargs:Dict):
+        return args, kwargs
+
+    def __init__(
+        self, 
+        name, 
+        manager: SyncManager, 
+        args_reader: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
+        args_writer: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
+    ):
+
+        self.name = name
+        self.manager = manager
+
+        self.args_reader = args_reader if args_reader else self.default_args_reader 
+        self.args_writer = args_writer if args_writer else self.default_args_writer
+
+        # states
+        ## [(return_idx, params)]
+        self.call_pending: ListProxy[Tuple[Optional[int], Any]] = manager.list()
+
+        ## return_idx -> data
+        self.res_pending: DictProxy[int, Any] = manager.dict()
+        
+        self.response_condition = Condition()
+
+        self.call_queue_lock = Lock()
+        self.return_addr_lock = Lock()
+
+        # TODO: reuse the address otherwise the channel will dies after the value overflow 
+        self.return_addr = Value('L', 1)  # the starting value is 1 so that I don't accidentally do something like `if not return_addr: return None `
+        self.call_semaphore = Semaphore(0)
+
+
+    def call_no_return(self, *args: P.args, **kwargs: P.kwargs)->None:
+        with self.call_queue_lock: 
+            self.call_pending.append((None, self.args_writer(args, kwargs)))
+            self.call_semaphore.release()
+        
+    #def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], Tuple[Literal[False], None]|Tuple[Literal[True], T]]:
+    def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], Tuple[bool, Optional[T]]]:
+        """
+        TODO: this function must not be used if the return will not be assessed
+        the locks and return values will sit there indefinately and accumulate
+
+        """
+        with self.return_addr_lock: 
+            self.return_addr.value += 1 
+            this_return_addr = self.return_addr.value 
+
+        with self.call_queue_lock: 
+            self.call_pending.append((self.return_addr.value, self.args_writer(args, kwargs)))
+            self.call_semaphore.release()
+
+        def await_result(timeout:Optional[float]=None):
+            
+            with self.response_condition:
+                ready = self.response_condition.wait_for(lambda: (this_return_addr in self.res_pending), timeout=timeout)
+
+            result = self.res_pending.pop(this_return_addr) if ready else None
+            return ready, result
+
+        return await_result
+
+    def await_and_handle_call(self, handler: Callable[P, T]):
+        self.call_semaphore.acquire()
+
+        with self.call_queue_lock: 
+            return_addr, (args, kwargs) = self.call_pending.pop(0)
+        
+        res = handler(*args, **kwargs) # type: ignore
+
+        if return_addr is None: return
+
+        with self.response_condition: 
+            self.res_pending[return_addr] = res
+            self.response_condition.notify_all()
+
+
+    def message_handling_loop(self, handler: Callable[P, T]):
+        while True:
+            self.await_and_handle_call(handler)
+
+    def start_message_handling_thread(self, handler: Callable[P, T]):
+        # TODO: have a pool of threads to consume the messages as fast as possible 
+        t = create_thread(self.message_handling_loop, handler=handler)
+        t.start()
+        return t
+
+@deprecated('it is very slow to create a lock by the manager. use V2 with condition instead ')
 class CallChannel(Generic[P, T]):
+    
 
     @staticmethod
     def default_args_reader(args:Tuple, kwargs:Dict):
@@ -166,6 +268,8 @@ class CallChannel(Generic[P, T]):
 
     def await_and_handle_call(self, handler: Callable[P, T]):
         self.call_semaphore.acquire()
+
+        # TODO: unclear if it's safe to do so. but given there's the GIL, it's probably okay? 
         call_id, (args, kwargs) = self.call_pending.pop(0)
         
         res = handler(*args, **kwargs) # type: ignore
@@ -180,7 +284,6 @@ class CallChannel(Generic[P, T]):
             self.await_and_handle_call(handler)
 
     def start_message_handling_thread(self, handler: Callable[P, T]):
-        # TODO: saving t to self.t may make the object unpickleable?
         # TODO: have a pool of threads to consume the messages as fast as possible 
         t = create_thread(self.message_handling_loop, handler=handler)
         t.start()
@@ -202,8 +305,21 @@ def declare_method_handler(obj:CallChannel, method: Callable[Concatenate[Any, P]
     """
     return obj
 
+def declare_function_handler_v2(obj:CallChannelV2, func: Callable[P, T]) ->  CallChannelV2[P, T]:
+    """
+    for type check purposes only
+    this function won't work if it is defined within the CallChannel class.
+    """
+    return obj
 
+def declare_method_handler_v2(obj:CallChannelV2, method: Callable[Concatenate[Any, P], T]) ->  CallChannelV2[P, T]:
+    """
+    ignore the first argment of the callable
 
+    for type check purposes only
+    this function won't work if it is defined within the CallChannel class.
+    """
+    return obj
 
 def loop_func(func:Callable, ideal_interval: float):
     while True:
@@ -298,7 +414,6 @@ def numpy_sample_setup(typecodes, default_values):
 
 
 
-# TODO: this requires the shape of the array to be pre-defined in the decorator, which is not ideal 
 def samples_producer(setup_function:Callable[..., Tuple[List[SampleReader], List[SampleWriter]]]=numpy_sample_setup, **partial_kwargs):
     """
     defer parameter specification 
