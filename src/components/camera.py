@@ -12,7 +12,7 @@ from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueP
 
 
 from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
+from components.logger import LoggerComponent, add_time
 
 import sys
 sys.path.append("/usr/lib/python3/dist-packages")
@@ -54,6 +54,10 @@ class Picamera2V2(ComponentInterface):
         self.cap = picam2
         self.name = name
 
+
+        # state
+        self.idx = 0
+
         # RPCs
         self.log = log
         self.save_video_frame = save_video_frame
@@ -65,10 +69,10 @@ class Picamera2V2(ComponentInterface):
         
         img = self.cap.capture_array("main")[:, :, :3] # type: ignore 
 
-        self.log.call_no_return(self.name, {}, 'time')
+        self.log.call_no_return(self.name, add_time({}), self.idx)
+        self.save_video_frame.call_no_return(self.name, img, self.idx)
 
-        self.save_video_frame.call_no_return(self.name, img)
-
+        self.idx += 1
         return (img, )
 
 

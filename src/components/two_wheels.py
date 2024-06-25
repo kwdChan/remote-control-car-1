@@ -1,22 +1,14 @@
-from pickle import NONE
 from typing import List, Dict, Literal, TypedDict, Union, Tuple, Any, Optional
 import datetime, time
 from typing_extensions import deprecated, override 
 import numpy as np 
 import pandas as pd
 import RPi.GPIO as GPIO #type: ignore
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
-from data_collection.data_collection import LoggerSet, Logger
-from dataclasses import dataclass
-
 
 from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
+from components.logger import LoggerComponent, add_time
 
 import numpy as np
-from typing import Dict, List
-from data_collection.data_collection import Logger, LoggerSet
 
 
 GPIOPWM = GPIO.PWM #type: ignore
@@ -40,6 +32,7 @@ class TwoWheelsV3(ComponentInterface):
         self.log = declare_method_handler(log, LoggerComponent.log)
 
         self.name = name
+        self.idx = 0
 
     @loop
     @sampler
@@ -58,7 +51,8 @@ class TwoWheelsV3(ComponentInterface):
         self.ch_left.ChangeDutyCycle(left)
         self.ch_right.ChangeDutyCycle(right)
 
-        self.log.call_no_return(self.name, dict(left=left, right=right), 'time')
+        self.log.call_no_return(self.name, add_time(dict(left=left, right=right)), self.idx)
+        self.idx += 1
         
   
     @classmethod

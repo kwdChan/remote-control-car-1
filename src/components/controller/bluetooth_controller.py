@@ -4,8 +4,7 @@ from typing import Optional, Tuple, TypeVar, Union, List, cast, Dict
 from typing_extensions import deprecated
 
 from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
-
+from components.logger import LoggerComponent, add_time
 
 import numpy as np 
 import time
@@ -29,6 +28,8 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
         self.speed = 50
         self.angular_speed = 135
         self.boost = False
+
+        self.idx = 0
 
     def up_handler(self):
         self.speed += 5
@@ -80,7 +81,8 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
         log_data['angular_velocity'] = angular_velocity
         log_data['speed'] = speed
 
-        self.log.call_no_return(self.name, log_data, 'time')
+        self.log.call_no_return(self.name, add_time(log_data), self.idx)
+        self.idx += 1
         return angular_velocity, speed
 
 
