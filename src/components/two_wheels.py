@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import RPi.GPIO as GPIO #type: ignore
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent, add_time
 
 import numpy as np

@@ -1,6 +1,6 @@
 from typing import Optional, Tuple, TypeVar, Union, List, cast, Dict
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent, add_time
 
 import numpy as np 

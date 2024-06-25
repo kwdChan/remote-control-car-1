@@ -1,4 +1,4 @@
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler
 import numpy as np
 from typing import Dict, List, Tuple
 from data_collection.data_collection import Logger, LoggerSet

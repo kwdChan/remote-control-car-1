@@ -10,7 +10,7 @@ from multiprocessing import Process
 import sys
 
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent
 
 

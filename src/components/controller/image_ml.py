@@ -1,6 +1,6 @@
 from typing import Callable, Optional, List, Any, Tuple
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent, add_time
 
 from pathlib import Path

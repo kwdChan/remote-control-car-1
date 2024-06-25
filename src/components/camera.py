@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List, Dict, Literal, Tuple, Union, Optional, Any, Callable
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent, add_time
 from picamera2 import Picamera2 
 from libcamera import Transform # type: ignore
