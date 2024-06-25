@@ -202,16 +202,6 @@ def declare_method_handler(obj:CallChannel, method: Callable[Concatenate[Any, P]
     """
     return obj
 
-# def tester(x:int, y:str)-> int:
-#     return x+int(y)
-
-# x = CallChannel('test', Manager())
-
-# x = declare_call_handler(x, tester)
-# x.call(1, y="1")
-# x.call(1, y=1)
-# x.call(1, y=1, j=1)
-# x.call(1)
 
 
 

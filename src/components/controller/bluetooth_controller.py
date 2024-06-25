@@ -1,13 +1,9 @@
-
-from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
 from typing import Optional, Tuple, TypeVar, Union, List, cast, Dict
-from typing_extensions import deprecated
 
 from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
 from components.logger import LoggerComponent, add_time
 
 import numpy as np 
-import time
 
 # work with bluetooth server v2, not v3
 @component

@@ -1,16 +1,6 @@
-from multiprocessing.managers import SyncManager
-from typing import Any, Union, cast, Optional
-from numpy._utils import set_module
-from typing_extensions import deprecated, override
+from typing import Any, Union, cast, Optional, Tuple, List
 from . import mpu6050
-from data_collection.data_collection import Logger, LoggerSet
 import time
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
-from multiprocessing.managers import BaseProxy, BaseManager
-
-from typing import Tuple, List
-from ctypes import c_double
 import numpy as np
 from ahrs.filters import Madgwick
 from ahrs import Quaternion
