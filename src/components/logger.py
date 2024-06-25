@@ -6,8 +6,10 @@ import datetime
 
 
 def add_time(data:Dict, key='time'):
+    data = data.copy()
     assert not key in data
     data[key] = datetime.datetime.now()
+    return data
 
 
 @component
