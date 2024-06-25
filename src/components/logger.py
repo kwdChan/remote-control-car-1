@@ -2,9 +2,12 @@ from components import ComponentInterface, CallChannel, component, sampler, samp
 import numpy as np
 from typing import Dict, List, Tuple
 from data_collection.data_collection import Logger, LoggerSet
+import datetime
 
 
-
+def add_time(data:Dict, key='time'):
+    assert not key in data
+    data[key] = datetime.datetime.now()
 
 
 @component
@@ -27,12 +30,9 @@ class LoggerComponent(ComponentInterface):
 
 
     @rpc() 
-    def log(self, name:str, data:Dict, idx:int, time_key=''):
+    def log(self, name:str, data:Dict, idx:int):
 
         logger = self.get_create_logger(name)
-
-        if time_key: 
-            logger.log_time(time_key)
 
         for k, v in data.items():
             logger.log(k, v, idx)
