@@ -25,7 +25,6 @@ class ImageMLControllerV3b(ComponentInterface):
         self.idx = 0
 
     
-    # TODO: add time data and ignore the frames if the handler isn't fast enough
     @rpc()
     @sampler
     @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
