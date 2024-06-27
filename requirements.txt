@@ -24,5 +24,4 @@ PyGObject
 smbus2
 python-prctl
 rpi-kms
-rpi-libcamera
 picamera2

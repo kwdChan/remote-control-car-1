@@ -98,6 +98,7 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
 class CallChannelV2(Generic[P, T]):
     """
     #TODO: testing
+    #TODO: V3 with shared memory manager 
     """
 
     @staticmethod
@@ -449,7 +450,7 @@ def sampler_wrapper(func: Callable, args: List[SampleReader]=[], kwargs: Dict[st
         return func(*args_realised, **kwargs_realised)
     return wrapped_func
 
-def sample_producer_wrapper(func: Callable[..., Tuple], sampler_writers: List[SampleWriter]):
+def sample_producer_wrapper(func: Callable[..., Tuple], sampler_writers: List[SampleWriter]=[]):
     def wrapped_func(*args, **kwargs):
         return_values = func(*args, **kwargs)
 
@@ -479,6 +480,9 @@ def target(
     loop_intervals:Dict[str, float], 
     init_kwargs:Dict, 
     ):
+    """
+    TODO: packages them into smaller reusable functions 
+    """
 
     obj = instantiater(**outgoing_rpcs, **init_kwargs)
 
@@ -561,8 +565,10 @@ class ComponentStarter:
         self.__incoming_sample_readers: List[SampleReader] =[]
         self.process = None
 
-
-
+    @property
+    def outgoing_samples(self):
+        # alias
+        return self.outgoing_sample_readers
 
     def register_outgoing_rpc(self, outgoing_rpcs: Dict[str, CallChannel]):
         self.__outgoing_rpcs = outgoing_rpcs
