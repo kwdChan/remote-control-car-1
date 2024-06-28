@@ -25,17 +25,18 @@ from data_collection.data_collection import Logger
 from typing import Type, ParamSpec
 import array
 
+
 P = ParamSpec('P')
 T = TypeVar('T')
 F = TypeVar('F', bound=Callable)
 
-def create_thread(_target: Callable[P, T], *args: P.args, **kwargs: P.kwargs):
+def create_thread(_target: Callable[P, T], /,*args: P.args, **kwargs: P.kwargs):
     """
     start a thread with type check
     """
     return threading.Thread(target=_target, args=args, kwargs=kwargs)
 
-def create_process(_target: Callable[P, T], *args: P.args, **kwargs: P.kwargs):
+def create_process(_target: Callable[P, T], /,*args: P.args, **kwargs: P.kwargs):
     """
     start a process with type check
     """
@@ -596,4 +597,24 @@ class ComponentStarter:
             )
         self.process.start()
 
+
+# from queue import Queue
+# just do `from concurrent.futures import ThreadPoolExecutor`
+# class ThreadHandler:
+#     def __init__(self):
+#         self.run = True
+#         self.queue: Queue[Tuple[Callable, Tuple, Dict]] = Queue()
+#         self.thread = threading.Thread(target=self.loop)
+#         self.thread.start()
+
+#     def call(self, _func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs):
+#         self.queue.put((_func, args, kwargs))
+
+#     def loop(self):
+#         while self.run:
+#             func, args, kwargs = self.queue.get()
+#             func(*args, **kwargs)
+            
+#     def kill(self):
+#         self.run = False
 
