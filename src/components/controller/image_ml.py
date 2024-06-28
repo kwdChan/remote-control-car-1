@@ -1,7 +1,7 @@
-from typing import Callable, Optional, List, Any, Tuple
+from typing import Callable, Optional, List, Any, Tuple, cast
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent, add_time
 
 from pathlib import Path
 import numpy as np 
@@ -10,73 +10,160 @@ import time
 import tensorflow as tf
 import tensorflow.keras as keras # type: ignore 
 from data_collection.data_collection import LoggerSet, Logger
+from utils import Timer
+from concurrent.futures import ThreadPoolExecutor
+
+
+# def get_model():
+#     model_path = './2Jun-pi.keras'
+#     ml_model = keras.models.load_model(model_path) 
+#     def model(arr):
+
+#         out = ml_model(arr[None, :]/255)[0]
+#         out *= 100
+#         out = out.numpy()
+
+#         return out[0], out[3]
+#     return model
+
+# def get_model2():
+#     model_path = './2Jun-pi.keras'
+#     ml_model = keras.models.load_model(model_path) 
+#     def model(arr, values: List):
+        
+#         values = cast(np.ndarray, np.stack(values, axis=0)).mean(0) 
+
+#         out = ml_model(arr[None, :]/255, values)[0]
+#         out *= 100
+#         out = out.numpy()
+
+#         return out[0], out[3]
+#     return model
+
+
+@component
+class ImageMLControllerV4(ComponentInterface):
+
+    ModelFuncType = Callable[[np.ndarray, List[Any]], Tuple[float, float]]
+
+    def __init__(self, func: Callable[[], ModelFuncType], log, name):
+
+        self.model = func()
+
+        self.log = declare_method_handler(log, LoggerComponent.log)
+
+        self.executor = ThreadPoolExecutor(max_workers=5)
+
+        self.name = name
+    
+        self.idx = 0
+
+        self.scalars = []
+
+        self.v0 = 0
+        self.v1 = 0
+
+
+    @rpc()
+    def pass_scalars(self, value):
+        self.scalars.append(value)
+
+    def get_reset_scalars(self):
+        scalars, self.scalars = self.scalars, []
+        return scalars
+
+    @rpc()
+    @sampler
+    def run_model(self, arr:np.ndarray): 
+        with Timer() as timer: 
+            scalars = self.get_reset_scalars()
+            self.v0, self.v1 = self.model(arr, scalars)
+
+        data = {}
+        data['timelapsed'] = timer.timelapsed
+
+        self.executor.submit(self.output, time_wait_ms=100)
+
+        self.log.call_no_return(self.name, add_time(data, 'run_model'), self.idx)
+        self.idx += 1
+
+    @samples_producer(typecodes=['d', 'd'], default_values=[0, 0]) 
+    def output(self, time_wait_ms: float):
+        time.sleep(time_wait_ms/1000)
+        return self.v0, self.v1
+
+
+
 @component
 class ImageMLControllerV3b(ComponentInterface):
 
-    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
+    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, name):
 
         self.model = func()
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
         self.name = name
 
+        self.idx = 0
+
     
-    # TODO: add time data and ignore the frames if the handler isn't fast enough
     @rpc()
     @sampler
+    @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
     def step(self, arr:np.ndarray): 
 
-        self.increment_index.call_no_return(self.name)
         t0 = time.monotonic()
+        data = {}
 
-        self.log_time.call_no_return(self.name, 'before')
+        data = add_time(data, 'before')
 
         assert not (arr is None)
 
         v0, v1 = self.model(arr)
         t1 = time.monotonic()
 
-        self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
+        data['timelapsed'] = t1-t0
+
+        self.log.call_no_return(self.name, add_time(data), self.idx)
+        self.idx += 1
         
         return v0, v1
 
 
 
-@component
-class ImageMLControllerV3a(ComponentInterface):
+# @component
+# class ImageMLControllerV3a(ComponentInterface):
 
-    def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
+#     def __init__(self, func: Callable[[], Callable[[np.ndarray], Tuple[int, int]]], log, log_time, increment_index, name):
 
-        self.model = func()
+#         self.model = func()
 
-        self.log = declare_method_handler(log, LoggerComponent.log)
-        self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
-        self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
+#         self.log = declare_method_handler(log, LoggerComponent.log)
+#         self.log_time = declare_method_handler(log_time, LoggerComponent.log_time)
+#         self.increment_index = declare_method_handler(increment_index, LoggerComponent.increment_index)
 
-        self.name = name
+#         self.name = name
 
     
-    # TODO: add time data and ignore the frames if the handler isn't fast enough
-    @loop
-    @sampler
-    def step(self, arr): 
+#     # TODO: add time data and ignore the frames if the handler isn't fast enough
+#     @loop
+#     @sampler
+#     def step(self, arr): 
 
-        self.increment_index.call_no_return(self.name)
-        t0 = time.monotonic()
+#         self.increment_index.call_no_return(self.name)
+#         t0 = time.monotonic()
 
-        self.log_time.call_no_return(self.name, 'before')
+#         self.log_time.call_no_return(self.name, 'before')
 
-        assert not (arr is None)
+#         assert not (arr is None)
 
-        v0, v1 = self.model(arr)
-        t1 = time.monotonic()
+#         v0, v1 = self.model(arr)
+#         t1 = time.monotonic()
 
-        self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
+#         self.log.call_no_return(self.name, dict(timelapsed=t1-t0))
         
-        return v0, v1
+#         return v0, v1
 
 
 

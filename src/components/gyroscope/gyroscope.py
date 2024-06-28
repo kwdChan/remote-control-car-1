@@ -1,16 +1,6 @@
-from multiprocessing.managers import SyncManager
-from typing import Any, Union, cast, Optional
-from numpy._utils import set_module
-from typing_extensions import deprecated, override
+from typing import Any, Union, cast, Optional, Tuple, List
 from . import mpu6050
-from data_collection.data_collection import Logger, LoggerSet
 import time
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
-from multiprocessing.managers import BaseProxy, BaseManager
-
-from typing import Tuple, List
-from ctypes import c_double
 import numpy as np
 from ahrs.filters import Madgwick
 from ahrs import Quaternion
@@ -19,8 +9,8 @@ from ahrs import Quaternion
 
 
 
-from components import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
-from components.logger import LoggerComponent
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.logger import LoggerComponent, add_time
 
 # @component(dict(logging=None))
 # class AngularSpeedControlV3(ComponentInterface):
@@ -37,7 +27,7 @@ class OrientationTrackerV3(ComponentInterface):
 
         self.log = declare_method_handler(log, LoggerComponent.log)
 
-
+        self.idx = 0
         self.name = name 
         self.initial_ori, self.gyro_bias = self.get_initial_orientation_and_gyro_bias(device)
 
@@ -47,6 +37,7 @@ class OrientationTrackerV3(ComponentInterface):
                 initial_ori=self.initial_ori, 
                 gyro_bias = self.gyro_bias, 
             ), 
+            self.idx 
             )
 
         # states
@@ -55,7 +46,7 @@ class OrientationTrackerV3(ComponentInterface):
     
     @samples_producer(typecodes=['d', 'd', 'd', 'd'], default_values=[0, 0, 0, 0])
     @loop
-    def step(self, increment=True):
+    def step(self, log_idx=None):
         new_time = time.monotonic()
         self.madgwick.Dt =  new_time - self.t_last
         self.t_last = new_time
@@ -67,15 +58,14 @@ class OrientationTrackerV3(ComponentInterface):
         acc = np.array(acc) # TODO: does not exist in the old version
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
 
-
+        log_idx = self.idx if log_idx is None else log_idx
         self.log.call_no_return(
             self.name, 
-            dict(
+            add_time(dict(
                 q = new_ori, 
                 linear_acc = acc, 
-                ), 
-            "time_OrientationTracker",
-            increment_index = increment, 
+                ), "time_OrientationTracker"), 
+            log_idx, 
             )
         self.last_ori = new_ori
 
@@ -125,6 +115,8 @@ class AngularSpeedControlV3(ComponentInterface):
         self.last_angle = 0
         self.current_proportion = 0.5
 
+        self.idx = 0
+
     @loop
     @samples_producer(typecodes=['d', 'd'], default_values=[0, 0])
     @sampler
@@ -136,7 +128,7 @@ class AngularSpeedControlV3(ComponentInterface):
     ) -> Tuple[float, float]:
 
 
-        ori = Quaternion(self.ori_tracker.step(increment=False))  # type: ignore ???? Quaternion cannot take Tuple??
+        ori = Quaternion(self.ori_tracker.step(log_idx = self.idx))  # type: ignore ???? Quaternion cannot take Tuple??
         
 
         this_t = time.monotonic() 
@@ -195,7 +187,9 @@ class AngularSpeedControlV3(ComponentInterface):
             warn = warn, 
             angular_velocity = angular_velocity, 
         )
-        self.log.call_no_return(self.name, data, "time_AngularSpeedControl")
+
+        self.log.call_no_return(self.name, add_time(data, "time_AngularSpeedControl"), self.idx)
+        self.idx += 1
 
         return left, right
         
