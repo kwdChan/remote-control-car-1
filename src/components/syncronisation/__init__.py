@@ -90,7 +90,7 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
         flatten_arr[:] = array.array(typecode, value.ravel()) # type: ignore
 
     def reader():
-        return np.array(flatten_arr[:]).reshape(dim)
+        return np.array(flatten_arr[:], dtype = default_value.dtype).reshape(dim)
 
     return reader, assigner
 
