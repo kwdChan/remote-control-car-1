@@ -21,12 +21,15 @@ from components.logger import LoggerComponent, add_time
 @component
 class OrientationTrackerV3(ComponentInterface):
     #initial_ori: Any
-    def __init__(self, device: mpu6050.MPU6050, log, ml_inputs, name="OrientationTrackerV3"):
+    def __init__(self, device: mpu6050.MPU6050, log, ml_inputs:Optional[CallChannel]=None, name="OrientationTrackerV3"):
         self.device = device
         self.madgwick = Madgwick()
 
         self.log = declare_method_handler(log, LoggerComponent.log)
-        self.ml_inputs = declare_method_handler(ml_inputs, ImageMLControllerV4.pass_values)
+        if ml_inputs: 
+            self.ml_inputs = declare_method_handler(ml_inputs, ImageMLControllerV4.pass_values)
+        else: 
+            self.ml_inputs = None
 
         self.idx = 0
         self.name = name 
@@ -59,7 +62,8 @@ class OrientationTrackerV3(ComponentInterface):
         assert isinstance(acc, tuple)
         acc = np.array(acc) # TODO: required by the type checker. does not need to exist in the old version
 
-        self.ml_inputs.call_no_return(dict(acc=acc))
+        if self.ml_inputs: 
+            self.ml_inputs.call_no_return(dict(acc=acc))
 
 
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
@@ -203,7 +207,7 @@ class AngularSpeedControlV3(ComponentInterface):
     def entry(
         cls, 
         log,
-        ml_inputs, 
+        ml_inputs=None, 
         i2c_address=0x68, 
         bus_num=1,
         name = "AngularSpeedControlV3", 
