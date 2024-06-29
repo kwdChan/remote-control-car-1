@@ -9,10 +9,11 @@
     - it appearas that conda for python 3.10 or above cannot be installed on raspberry pi
     - Deadsnake PPA does not work on my raspberry pi 
     - Building it from source was required for my case 
-2. install opencv
-3. install libcamera
-4. pip install -r requirement.txt 
-5. install the python binding for libcamera
+1. `sudo apt-get install bluetooth bluez libbluetooth-dev libudev-dev libhdf5-dev`
+1. install opencv
+1. install libcamera
+1. pip install -r requirement.txt 
+1. install the python binding for libcamera
 
 ### Install the python binding for libcamera
 - if the distro comes with python 3.10 or 3.11, just do `sudo apt install -y python3-libcamera`. And then make it available to the venv 
