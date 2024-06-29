@@ -3,6 +3,42 @@ from multiprocessing import Manager
 
 from components import numpy_sample_setup
 import numpy as np 
+# ch = CallChannelV2('test', Manager())
+
+
+
+# with Timer() as call_timer:
+#     vs = []
+#     for _ in range(1000):
+#         vs.append(ch.call(1))
+
+# with Timer() as handle_timer:
+#     for _ in range(1000):
+#         ch.await_and_handle_call(lambda x:x)
+
+
+# with Timer() as call_and_return_timer:
+#     for _ in range(1000):
+#         f = ch.call(1)
+#         ch.await_and_handle_call(lambda x:x)
+#         f()
+
+# with Timer() as call_no_return_timer:
+#     for _ in range(1000):
+#         ch.call_no_return(1)
+
+
+# with Timer() as await_result_timer:
+#     [v() for v in vs]
+
+
+# {
+#     "call_no_return_timer":call_no_return_timer.timelapsed,
+#     "call_timer":call_timer.timelapsed, 
+#     "handle_timer":handle_timer.timelapsed, 
+#     "await_result_timer":await_result_timer.timelapsed, 
+#     "call_and_return_timer":call_and_return_timer.timelapsed
+# }
 
 
 @component

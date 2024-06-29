@@ -1,5 +1,5 @@
 from contextlib import ContextDecorator
-from typing import Callable
+from typing import Callable, List, Any
 import time
 
 class Timer:
@@ -14,3 +14,12 @@ class Timer:
     def __exit__(self, *exc):
         self.timelapsed = self.time_func()-self.t0
         return False
+
+
+def mon_samples(samples: List[Callable[[], Any]], interval=0.1):
+    while True:
+        line = ""
+        for s in samples:
+            line = line + str(s()) + ', '
+        print(line[:-2], end='           \r')
+        time.sleep(interval)

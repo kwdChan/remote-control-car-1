@@ -6,7 +6,7 @@ from components.gyroscope.gyroscope import AngularSpeedControlV3
 from components.camera import Picamera2V2
 from components.logger import LoggerComponent
 from components.two_wheels import TwoWheelsV3
-from components.controller.image_ml import ImageMLControllerV3b
+from components.controller.image_ml import ImageMLControllerV3b, ImageMLControllerV4
 
 from components.syncronisation import *
 

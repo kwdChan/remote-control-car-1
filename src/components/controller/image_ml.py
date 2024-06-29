@@ -1,17 +1,17 @@
 from typing import Callable, Optional, List, Any, Tuple, cast
 
-from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop, ThreadHandler
 from components.logger import LoggerComponent, add_time
 
 from pathlib import Path
 import numpy as np 
 from multiprocessing.managers import BaseManager, BaseProxy, SyncManager, ValueProxy
 import time
-import tensorflow as tf
-import tensorflow.keras as keras # type: ignore 
+#import tensorflow as tf
+#import tensorflow.keras as keras # type: ignore 
 from data_collection.data_collection import LoggerSet, Logger
 from utils import Timer
-from concurrent.futures import ThreadPoolExecutor
+#from concurrent.futures import ThreadPoolExecutor
 
 
 # def get_model():
@@ -52,7 +52,7 @@ class ImageMLControllerV4(ComponentInterface):
 
         self.log = declare_method_handler(log, LoggerComponent.log)
 
-        self.executor = ThreadPoolExecutor(max_workers=5)
+        self.handler = ThreadHandler()
 
         self.name = name
     
@@ -65,10 +65,10 @@ class ImageMLControllerV4(ComponentInterface):
 
 
     @rpc()
-    def pass_scalars(self, value):
+    def pass_values(self, value):
         self.scalars.append(value)
 
-    def get_reset_scalars(self):
+    def get_reset_values(self):
         scalars, self.scalars = self.scalars, []
         return scalars
 
@@ -76,13 +76,13 @@ class ImageMLControllerV4(ComponentInterface):
     @sampler
     def run_model(self, arr:np.ndarray): 
         with Timer() as timer: 
-            scalars = self.get_reset_scalars()
+            scalars = self.get_reset_values()
             self.v0, self.v1 = self.model(arr, scalars)
 
         data = {}
         data['timelapsed'] = timer.timelapsed
 
-        self.executor.submit(self.output, time_wait_ms=100)
+        self.handler.call(self.output, time_wait_ms=100)
 
         self.log.call_no_return(self.name, add_time(data, 'run_model'), self.idx)
         self.idx += 1

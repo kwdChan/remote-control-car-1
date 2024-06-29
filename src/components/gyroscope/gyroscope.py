@@ -4,7 +4,7 @@ import time
 import numpy as np
 from ahrs.filters import Madgwick
 from ahrs import Quaternion
-
+from components.controller.image_ml import ImageMLControllerV4
 #from components import Component, shared_value
 
 
@@ -21,11 +21,12 @@ from components.logger import LoggerComponent, add_time
 @component
 class OrientationTrackerV3(ComponentInterface):
     #initial_ori: Any
-    def __init__(self, device: mpu6050.MPU6050, log, name="OrientationTrackerV3"):
+    def __init__(self, device: mpu6050.MPU6050, log, ml_inputs, name="OrientationTrackerV3"):
         self.device = device
         self.madgwick = Madgwick()
 
         self.log = declare_method_handler(log, LoggerComponent.log)
+        self.ml_inputs = declare_method_handler(ml_inputs, ImageMLControllerV4.pass_values)
 
         self.idx = 0
         self.name = name 
@@ -53,9 +54,14 @@ class OrientationTrackerV3(ComponentInterface):
 
         acc = self.device.get_accel_data(g=True, return_dict=False)
         gyr = (self.device.get_gyro_data(return_dict=False)-self.gyro_bias)/180*np.pi
+
         
         assert isinstance(acc, tuple)
-        acc = np.array(acc) # TODO: does not exist in the old version
+        acc = np.array(acc) # TODO: required by the type checker. does not need to exist in the old version
+
+        self.ml_inputs.call_no_return(dict(acc=acc))
+
+
         new_ori = self.madgwick.updateIMU(self.last_ori, gyr=gyr, acc=acc)
 
         log_idx = self.idx if log_idx is None else log_idx
@@ -197,6 +203,7 @@ class AngularSpeedControlV3(ComponentInterface):
     def entry(
         cls, 
         log,
+        ml_inputs, 
         i2c_address=0x68, 
         bus_num=1,
         name = "AngularSpeedControlV3", 
@@ -207,7 +214,7 @@ class AngularSpeedControlV3(ComponentInterface):
 
         name = "AngularSpeedControlV3"
 
-        tracker = OrientationTrackerV3(device, log, name=name)
+        tracker = OrientationTrackerV3(device, log, ml_inputs, name=name)
         control = cls(tracker, log, name=name)
         return control
 

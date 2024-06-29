@@ -598,23 +598,25 @@ class ComponentStarter:
         self.process.start()
 
 
-# from queue import Queue
-# just do `from concurrent.futures import ThreadPoolExecutor`
-# class ThreadHandler:
-#     def __init__(self):
-#         self.run = True
-#         self.queue: Queue[Tuple[Callable, Tuple, Dict]] = Queue()
-#         self.thread = threading.Thread(target=self.loop)
-#         self.thread.start()
+from queue import Queue
+# concurrent.futures.ThreadPoolExecutor shutdown after idling for awhile?
+# https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
+#       "it is recommended that ThreadPoolExecutor not be used for long-running tasks."
+class ThreadHandler:
+    def __init__(self):
+        self.run = True
+        self.queue: Queue[Tuple[Callable, Tuple, Dict]] = Queue()
+        self.thread = threading.Thread(target=self.loop)
+        self.thread.start()
 
-#     def call(self, _func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs):
-#         self.queue.put((_func, args, kwargs))
+    def call(self, _func: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs):
+        self.queue.put((_func, args, kwargs))
 
-#     def loop(self):
-#         while self.run:
-#             func, args, kwargs = self.queue.get()
-#             func(*args, **kwargs)
+    def loop(self):
+        while self.run:
+            func, args, kwargs = self.queue.get()
+            func(*args, **kwargs)
             
-#     def kill(self):
-#         self.run = False
+    def kill(self):
+        self.run = False
 
