@@ -5,9 +5,10 @@ log
 __pycache__
 .ipynb_checkpoints
 .vscode
-*.keras
 venv
 src/training/data
 src/training/logs
+src/training/*/logs
+
 tg_token.py
 venv*
