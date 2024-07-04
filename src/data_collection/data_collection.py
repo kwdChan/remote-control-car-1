@@ -70,8 +70,12 @@ class Logger:
         chucks of data
         """
         path_obj = Path(path) / name
-        if path_obj.exists():
-            assert overwrite_ok
+        same_name_suffix_num = 1
+
+        while path_obj.exists():
+            same_name_suffix_num += 1 
+            path_obj = Path(path) / f"{name}-{same_name_suffix_num}"
+
         path_obj.mkdir(parents=True, exist_ok=overwrite_ok)
 
         # signal.signal(signal.SIGINT, self.__signal_handler)
