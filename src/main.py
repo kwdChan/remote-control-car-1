@@ -18,7 +18,7 @@ GPIO.setmode(GPIO.BOARD)
 
 def start_everything(): 
 
-    loggerset = LoggerSet('../log/main_session'+str(datetime.datetime.now()), overwrite_ok=False)
+    loggerset = LoggerSet('./log/main_session'+str(datetime.datetime.now()), overwrite_ok=False)
     manager = Manager()
 
     logger_process = ComponentStarter(
