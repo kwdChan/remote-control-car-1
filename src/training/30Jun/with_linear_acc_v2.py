@@ -1,7 +1,8 @@
 
 
 import sys
-sys.path += ['..']
+from typing_extensions import deprecated
+sys.path += ['../..', '..']
 
 from data_collection.data_collection import LoggerSet, Logger
 
@@ -31,46 +32,60 @@ def stack_frames(gen: Iterable[Tuple[int, np.ndarray]]):
     return np.stack(frames, axis=0)
 
 class Session:
-    def __init__(self, logpath):
+    def __init__(
+        self, 
+        logpath, 
+        camera_log_name = 'Picamera2V2', 
+        angular_speed_control_log_name='AngularSpeedControlV3'
+    
+    ):
         logpath = Path(logpath)
 
         errs = {}
-        if not (logpath/'Picamera2V2.parquet').exists():
+        if not (logpath/f'{camera_log_name}.parquet').exists():
             errs = prepare_parquets(logpath)
+
+        self.camera_log_name = camera_log_name
+        self.angular_speed_control_log_name = angular_speed_control_log_name
 
         self.data = {}
         self.errs = errs
         self.logpath = logpath
 
-        # main
-        self.load_data()
-        self.add_col_lin_acc('angular_speed_control_df', 'linear_acc')
-        self.add_col_sin_cos('angular_speed_control_df', 'angle')
-        self.add_col_frame_idx('angular_speed_control_df', 'camera_df', time_offset_ms=100)
-        self.add_col_rolling_mean_nominmax(
-            'angular_speed_control_df', 
-            'angular_velocity', 'angular_velocity_smooth',
-            window=50, shift=-49, center=False 
-            )
 
-        self.add_col_rolling_mean_nominmax(
-            'angular_speed_control_df', 
-            'left', 'left_smooth',
-            window=50, shift=-49, center=False 
-            )
-        self.add_col_rolling_mean_nominmax(
-            'angular_speed_control_df', 
-            'right', 'right_smooth',
-            window=50, shift=-49, center=False 
-            )
+        self.load_data()
+
+
+    # def main(self):
+    #     # main
+    #     
+    #     self.add_col_lin_acc('angular_speed_control_df', 'linear_acc')
+    #     self.add_col_sin_cos('angular_speed_control_df', 'angle')
+    #     self.add_col_frame_idx('angular_speed_control_df', 'camera_df', time_offset_ms=100)
+    #     self.add_col_rolling_mean_nominmax(
+    #         'angular_speed_control_df', 
+    #         'angular_velocity', 'angular_velocity_smooth',
+    #         window=50, shift=-49, center=False 
+    #         )
+
+    #     self.add_col_rolling_mean_nominmax(
+    #         'angular_speed_control_df', 
+    #         'left', 'left_smooth',
+    #         window=50, shift=-49, center=False 
+    #         )
+    #     self.add_col_rolling_mean_nominmax(
+    #         'angular_speed_control_df', 
+    #         'right', 'right_smooth',
+    #         window=50, shift=-49, center=False 
+    #         )
 
     def load_data(self):
         """
         reusable
         """
-        self.data['camera_df'] =  pd.read_parquet(self.logpath/'Picamera2V2.parquet')
-        self.data['angular_speed_control_df'] = pd.read_parquet(self.logpath/'AngularSpeedControlV3.parquet')
-        self.data['frames'] = stack_frames(get_frame_iterator(self.logpath/"Picamera2V2/video"))
+        self.data['camera_df'] =  pd.read_parquet(self.logpath/f'{self.camera_log_name}.parquet')
+        self.data['angular_speed_control_df'] = pd.read_parquet(self.logpath/f'{self.angular_speed_control_log_name}.parquet')
+        self.data['frames'] = stack_frames(get_frame_iterator(self.logpath/f"{self.camera_log_name}/video"))
 
     def add_col_lin_acc(self, df_name, column_name): 
         """
@@ -93,17 +108,12 @@ class Session:
         df[column+'_sin'] = np.sin(df[column]/180*np.pi)
         df[column+'_cos'] = np.cos(df[column]/180*np.pi)
 
-
-
-
     def add_col_rolling_mean_nominmax(self, df_name, column, new_col, window, shift, **kwargs):
         def mean_nominmax(x):
             return (x.sum()-x.max()-x.min())/(len(x)-2)
         df = self.data[df_name]
         assert not new_col in df.columns
         df[new_col] = df[column].rolling(window, **kwargs).apply(mean_nominmax).shift(shift)
-
-
 
     def add_col_frame_idx(self, df_name,  camera_df_name, time_offset_ms=100):
         """
@@ -123,36 +133,37 @@ class Session:
         return f"Session('{str(self.logpath)}')"
 
     @classmethod
-    def load_multiple_session(cls, parent_folder, inclusion_filter=lambda d: d.stem!='excluded'):
+    def load_multiple_session(cls, parent_folder, **kwargs):
         """
         reusable - instantiates only
         """
         results = []
-        for d in filter(inclusion_filter, Path(parent_folder).iterdir()):
-            results.append(cls(d))
+        for d in Path(parent_folder).iterdir():
+            results.append(cls(d, **kwargs))
 
         return results
 
-    @staticmethod
-    def concatenate_multiple_sessions(sessions: List["Session"], df_name='angular_speed_control_df'):
-        """
-        MODIFY THE DATAFRAME *IN PLACE* as a side effect
+    # @deprecated('this is a very bad idea. just prepare the sample for each session separately. ')
+    # @staticmethod
+    # def concatenate_multiple_sessions(sessions: List["Session"], df_name='angular_speed_control_df'):
+    #     """
+    #     MODIFY THE DATAFRAME *IN PLACE* as a side effect
 
-        depends on match_frame_idx
-        """
+    #     depends on match_frame_idx
+    #     """
 
-        frame_set_list = []
-        df_list = []
-        total_frames = 0
+    #     frame_set_list = []
+    #     df_list = []
+    #     total_frames = 0
 
-        for s in sessions:
+    #     for s in sessions:
 
-            frames, df = s.data['frames'], s.data[df_name]
-            df['offset_total_frame_idx'] = df['offset_frame_idx'] + total_frames
-            df['exact_total_frame_idx'] = df['exact_frame_idx'] + total_frames
+    #         frames, df = s.data['frames'], s.data[df_name]
+    #         df['offset_total_frame_idx'] = df['offset_frame_idx'] + total_frames
+    #         df['exact_total_frame_idx'] = df['exact_frame_idx'] + total_frames
 
-            total_frames += len(frames)
-            df_list.append(df)
-            frame_set_list.append(frames)
+    #         total_frames += len(frames)
+    #         df_list.append(df)
+    #         frame_set_list.append(frames)
 
-        return np.concatenate(frame_set_list, axis=0), pd.concat(df_list)
+    #     return np.concatenate(frame_set_list, axis=0), pd.concat(df_list)
