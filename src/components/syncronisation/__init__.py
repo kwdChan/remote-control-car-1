@@ -648,12 +648,24 @@ class ProcessStarter:
             # 2. process is None            
             return False
 
-
+    @deprecated('old alias')
     def kill(self):
+        """
+        old alias
+        """
+        self.termainate()
+
+    def termainate(self):
+        
+        # TODO: change is to self.terminated 
         self.killed = True
         if self.process: 
-            self.process.kill()
-            self.process.close()
+            try: 
+                self.process.terminate()
+                self.process.join()
+                self.process.close()
+            except:
+                pass
 
     def __retry_n_times(self, n_times:int, check_interval:float):
         """

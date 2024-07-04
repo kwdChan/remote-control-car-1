@@ -14,9 +14,15 @@ from multiprocessing import Manager
 import numpy as np
 import datetime
 import RPi.GPIO as GPIO
+import sys
+import signal
+import atexit
+
 GPIO.setmode(GPIO.BOARD)
 
+
 def start_everything(): 
+
 
     loggerset = LoggerSet('./log/main_session'+str(datetime.datetime.now()), overwrite_ok=False)
     manager = Manager()
@@ -120,6 +126,8 @@ def start_everything():
     angular_speed_control_process.start()
     picamera_process.start()
 
+
+
     result = (
         bt_ser_process_man, 
         bluetooth_control_process.process_starter, 
@@ -129,18 +137,40 @@ def start_everything():
         picamera_process.process_starter
     )
 
-    return cast(List[ProcessStarter], result)
+    result = cast(List[ProcessStarter], result)
+    def signal_handler(signum, frame):
+
+        for r in result:
+            r.kill()
+
+
+    atexit.register(signal_handler, None, None)
+
+    # there can only be one signal_handler. doing so overwrite the handler outside 
+    # signal.signal(signal.SIGINT, signal_handler)
+    # signal.signal(signal.SIGTERM, signal_handler)
+
+
+    return result
 
 def retry_everything(n_times, mon_interval_sec):
-    process_starters = start_everything() 
+
+
+    def signal_handler(signum, frame):
+        sys.exit()
+        
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)    
 
     for n in range(n_times): 
-
+        process_starters = start_everything() 
         while all((p.is_alive() for p in process_starters)): 
             time.sleep(mon_interval_sec)
 
         [p.kill() for p in process_starters]
-        process_starters = start_everything()
-        
-    
+
+
+
+
+# TODO: the program refuses to exit for retry > 1
 retry_everything(5, mon_interval_sec = 2)
