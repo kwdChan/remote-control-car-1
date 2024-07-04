@@ -564,7 +564,10 @@ class ComponentStarter:
         self.__outgoing_sample_writers = outgoing_sample_writers
         self.__outgoing_rpcs: Dict[str, CallChannel] = {}
         self.__incoming_sample_readers: List[SampleReader] =[]
-        self.process = None
+
+
+        self.process_starter: Optional[ProcessStarter] = None
+
 
     @property
     def outgoing_samples(self):
@@ -582,9 +585,14 @@ class ComponentStarter:
         return self.__outgoing_sample_writers
 
 
-    def start(self):
-        assert self.process is None, "already started"
-        self.process = create_process(
+    def start(self, **kwargs):
+        assert not self.process_starter, "already started"
+        self.process_starter = ProcessStarter(self.__start)
+        self.process_starter.start(**kwargs)
+
+    def __start(self):
+
+        process = create_process(
             target, 
             component_class=self.__component_class,
             instantiater=self.__instantiator,
@@ -595,7 +603,78 @@ class ComponentStarter:
             loop_intervals = self.__loop_intervals, 
             init_kwargs= self.__init_kwargs
             )
-        self.process.start()
+        process.start()
+        return process
+
+    
+
+
+class ProcessStarter:
+    """
+    should have named it process manager...
+    """
+    def __init__(self, starter: Callable[P, Process], /, *args: P.args, **kwargs: P.kwargs):
+        self.__start = starter 
+        self.args = args
+        self.kwargs= kwargs
+        self.process: Optional[Process] = None
+        self.started = False
+        self.last_attempt = False
+        
+
+    def start(self, retry: int=5, check_interval:float=2):
+
+        assert not self.started
+        self.started = True
+
+        self.process = self.__start(*self.args, **self.kwargs)
+
+        # the retry thread also joins the process to make sure it doesn't end when the main process has nothing to run
+        self.retry_thread = create_thread(self.__retry_n_times, retry, check_interval)
+
+    def is_alive(self):
+        """
+        
+        """
+        return (not self.last_attempt) or self.is_process_alive()
+
+    def is_process_alive(self):
+        return (not (self.process is None)) and self.process.is_alive()
+
+    def kill(self):
+        self.killed = True
+        if self.process: 
+            self.process.kill()
+            self.process.close()
+
+    def __retry_n_times(self, n_times:int, check_interval:float):
+        """
+        TODO: 
+        this may have unintended consequences
+        the failed RPC call will never return or be fulfilled if it is not put back in queue 
+        """
+        nth_time = 0
+        while (nth_time < n_times):
+            while self.is_process_alive():
+                time.sleep(check_interval)
+                
+            if self.process:
+                self.process.close()
+
+            if not self.killed: 
+                self.process = self.__start(*self.args, **self.kwargs)
+
+            nth_time += 1
+
+        # no more retry
+        self.last_attempt = True
+
+        # to make sure the process doesn't just get finished when the main process has nothing to run
+        if self.process:
+            self.process.join()
+            
+
+    
 
 
 from queue import Queue
