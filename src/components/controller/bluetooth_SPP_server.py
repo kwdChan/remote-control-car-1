@@ -10,7 +10,7 @@ from multiprocessing import Process
 import sys
 
 
-from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop
+from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler, loop, ProcessStarter
 from components.logger import LoggerComponent
 
 
@@ -30,6 +30,30 @@ def start_bluetooth_server_v4(call_channels:List[CallChannel[[str], None]]=[]):
     return p
     
 
+def start_bluetooth_server_v2b(manager: SyncManager):
+    """
+    use ProcessRetry to allow the process to be restarted 
+    """
+
+    data = manager.dict()
+
+    def update(message:str):
+        "a -> a down, a0 = a up"
+        up = message[-1] != '0'
+        key = message if up else message[:-1]
+        data[key] = up
+
+    def starter(): 
+
+        p = Process(
+            target=main,
+            args=(update, )
+        )
+        p.start()
+        return p
+
+    return [lambda: data._getvalue()], ProcessStarter(starter)
+    
 
 def start_bluetooth_server_v2(manager: SyncManager):
 
