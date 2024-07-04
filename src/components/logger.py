@@ -1,6 +1,6 @@
 from components.syncronisation import ComponentInterface, CallChannel, component, sampler, samples_producer, rpc, declare_method_handler
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 from data_collection.data_collection import Logger, LoggerSet
 import datetime
 
@@ -48,7 +48,14 @@ class LoggerComponent(ComponentInterface):
     @rpc()
     def save_video_frame(self, name:str, frame:np.ndarray, idx:int):
         logger = self.get_create_logger(name)
-        logger.save_video_frame(frame, idx)
+
+        try: 
+            logger.save_video_frame(frame, idx)
+        except:
+            #TODO: should be the setup and save methods in one method
+            self.setup_video_saver(name, resolution=cast(Tuple, frame.shape[:2]), framerate=30)
+            logger = self.get_create_logger(name)
+            logger.save_video_frame(frame, idx)
 
     @rpc()
     def get_logger(self, name: str):
