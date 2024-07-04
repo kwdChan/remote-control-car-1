@@ -14,9 +14,21 @@ from multiprocessing import Manager
 import numpy as np
 import datetime
 import RPi.GPIO as GPIO
+
+import signal
+
+
+
+
+
 GPIO.setmode(GPIO.BOARD)
 
+
+
+
+
 def start_everything(): 
+
 
     loggerset = LoggerSet('../log/main_session'+str(datetime.datetime.now()), overwrite_ok=False)
     manager = Manager()
@@ -120,6 +132,13 @@ def start_everything():
     angular_speed_control_process.start()
     picamera_process.start()
 
+
+
+
+
+
+
+
     result = (
         bt_ser_process_man, 
         bluetooth_control_process.process_starter, 
@@ -129,9 +148,22 @@ def start_everything():
         picamera_process.process_starter
     )
 
-    return cast(List[ProcessStarter], result)
+    result = cast(List[ProcessStarter], result)
+    def signal_handler(signum, frame):
+
+        for r in result:
+            r.kill()
+        
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGKILL, signal_handler)
+
+
+
+    return result
 
 def retry_everything(n_times, mon_interval_sec):
+
     process_starters = start_everything() 
 
     for n in range(n_times): 
@@ -141,6 +173,8 @@ def retry_everything(n_times, mon_interval_sec):
 
         [p.kill() for p in process_starters]
         process_starters = start_everything()
-        
+
+
+
     
 retry_everything(5, mon_interval_sec = 2)
