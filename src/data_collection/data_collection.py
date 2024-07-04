@@ -70,9 +70,9 @@ class Logger:
         chucks of data
         """
         path_obj = Path(path) / name
+        
         same_name_suffix_num = 1
-
-        while path_obj.exists():
+        while path_obj.exists() and (not overwrite_ok):
             same_name_suffix_num += 1 
             path_obj = Path(path) / f"{name}-{same_name_suffix_num}"
 
