@@ -620,17 +620,19 @@ class ProcessStarter:
         self.process: Optional[Process] = None
         self.started = False
         self.last_attempt = False
+        self.killed = False
         
 
     def start(self, retry: int=5, check_interval:float=2):
 
-        assert not self.started
+        assert not (self.started or self.killed)
         self.started = True
 
         self.process = self.__start(*self.args, **self.kwargs)
 
         # the retry thread also joins the process to make sure it doesn't end when the main process has nothing to run
         self.retry_thread = create_thread(self.__retry_n_times, retry, check_interval)
+        self.retry_thread.start()
 
     def is_alive(self):
         """
