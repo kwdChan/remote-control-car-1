@@ -641,7 +641,13 @@ class ProcessStarter:
         return (not self.last_attempt) or self.is_process_alive()
 
     def is_process_alive(self):
-        return (not (self.process is None)) and self.process.is_alive()
+        try: 
+            return self.process.is_alive() # type: ignore
+        except:
+            # 1. process is closed
+            # 2. process is None            
+            return False
+
 
     def kill(self):
         self.killed = True
