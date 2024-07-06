@@ -520,7 +520,7 @@ class ComponentStarter:
         sample_setup_kwargs = {}
         ):
         """
-
+        TODO: need to give a warning if the component isn't decorated yet
         """
 
 
