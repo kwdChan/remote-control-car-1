@@ -1,52 +1,90 @@
 
-from typing import Union, Tuple
+from typing import Optional, Union, Tuple
 from pvrecorder import PvRecorder
 from scipy.fft import fft, fftfreq
 import numpy as np
 
+from components.syncronisation import create_thread
+
+def get_microphone_reader(device_index: Union[int, None], frame_length, device_name_match='usb'):
+    if device_index is None:
+        device_index, device_name = MicrophoneReader.try_get_devices(device_name_match)
+        print(f'using device: {device_name}')
+
+    
 
 class MicrophoneReader:
-    def __init__(self, device_index: Union[int, None], frame_length, signal_nframe, sxx_nframe, device_name_match='usb'):
+    """
+    connect to the microphone, return the signal
+
+    """
+    def __init__(self, device_index: Union[int, None], approx_frame_duration:Optional[float]=None, frame_length:Optional[int]=None, device_name_match='usb', n_frame_buffer=5):
         if device_index is None:
             device_index, device_name = MicrophoneReader.try_get_devices(device_name_match)
             print(f'using device: {device_name}')
 
+        assert not (approx_frame_duration and frame_length), "only one of these two should be provided"
+        if frame_length is None:
+            assert approx_frame_duration
+            guess_sample_rate = self.get_sample_rate(device_index)
+            frame_length = int(guess_sample_rate*approx_frame_duration)
+
         # recorder 
         recorder = PvRecorder(frame_length=frame_length, device_index=device_index)
         recorder.start()
-        self.recorder  = recorder 
 
-        # values 
-        freqs = fftfreq(recorder.frame_length*signal_nframe, 1/recorder.sample_rate)
-        n_freqs = int(len(freqs) //2)
-        freqs = freqs[:n_freqs] # type: ignore
         frame_duration = recorder.frame_length / recorder.sample_rate
 
-        # buffer 
-        self.signal_buffer = [np.zeros(frame_length) for _ in range(signal_nframe)]
-        self.sxx_buffer = [np.zeros(n_freqs) for _ in range(sxx_nframe)]
-
-
         # values 
-        self.freqs = freqs
-        self.n_freqs = n_freqs
+        self.recorder  = recorder 
+
+        # for public access only
         self.frame_length = frame_length
         self.frame_duration = frame_duration
+        self.n_frame_buffer = n_frame_buffer
+        self.sample_rate = recorder.sample_rate
+
+        # states
+        self.__signal_buffer = [[]]*n_frame_buffer
+        self.__to_sample: bool
+
+        # start 
+        self.start()
 
 
-    def sample(self):
-        """
-        fft overlaps
-        """
+    def start(self):
+        self.__to_sample = True
+        self.sampling_thread = create_thread(self.__sample)
+        self.sampling_thread.start()
 
-        x = self.recorder.read()
-        
-        self.signal_buffer = self.signal_buffer[1:] + [x]
+    def __sample(self):
+        while self.__to_sample: 
+            x = self.recorder.read()
+            self.__signal_buffer = self.__signal_buffer[1:] + [x]
 
-        y = fft(np.concatenate(self.signal_buffer))[:self.n_freqs]
-        sxx = np.log(y.real**2 + y.imag**2) # type: ignore 
-        
-        self.sxx_buffer =  self.sxx_buffer[1:] + [sxx] 
+    def stop(self):
+        # flag the thread to end 
+        self.__to_sample = False
+
+
+    def release(self):
+        self.stop()
+        self.recorder.delete()
+
+    
+    def get_signal(self) -> np.ndarray:
+        return np.concatenate(self.__signal_buffer)
+    
+
+    @staticmethod
+    def get_sample_rate(device_index, _sham_frame_length=1000)->int:
+        recorder = PvRecorder(frame_length=_sham_frame_length, device_index=device_index)
+        try: 
+            sample_rate = recorder.sample_rate
+        finally:
+            recorder.delete()
+        return sample_rate
+
 
     @staticmethod
     def show_devices():
