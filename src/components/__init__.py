@@ -10,3 +10,4 @@ from components.controller.image_ml import ImageMLControllerV3b, ImageMLControll
 
 from components.syncronisation import *
 
+from components.microphone.ahhhhh import PitchAngularVelocityController
