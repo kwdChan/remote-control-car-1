@@ -21,5 +21,5 @@ def mon_samples(samples: List[Callable[[], Any]], interval=0.1):
         line = ""
         for s in samples:
             line = line + str(s()) + ', '
-        print(line[:-2], end='           \r')
+        print(line[:-2], end='                          \r')
         time.sleep(interval)
