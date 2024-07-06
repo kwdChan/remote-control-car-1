@@ -132,8 +132,8 @@ class AngularSpeedControlV3(ComponentInterface):
     @sampler
     def step(
         self, 
-        degree_per_second, 
         speed,
+        degree_per_second, 
         reset_target_orientation=False, 
     ) -> Tuple[float, float]:
 

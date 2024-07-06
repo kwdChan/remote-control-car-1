@@ -6,6 +6,7 @@ from components.logger import LoggerComponent, add_time
 import numpy as np 
 
 # work with bluetooth server v2, not v3
+# TODO: the bluetooth server can be a part of this process with threading
 @component
 class BlueToothCarControlSPP_V2(ComponentInterface):
     def __init__(self, log, name='BlueToothCarControlSPP_V2'):
@@ -79,7 +80,7 @@ class BlueToothCarControlSPP_V2(ComponentInterface):
 
         self.log.call_no_return(self.name, add_time(log_data), self.idx)
         self.idx += 1
-        return angular_velocity, speed
+        return speed, angular_velocity
 
 
 def get_press_reaction(handler):
