@@ -2,7 +2,8 @@ from typing import Callable, List, Union, cast
 from typing_extensions import deprecated
 import numpy as np
 
-from components.syncronisation import ComponentInterface, component, loop, samples_producer
+from components.syncronisation import CallChannel, ComponentInterface, component, declare_function_handler, loop, samples_producer
+from components.logger import LoggerComponent, add_time
 from data_collection.data_collection import LoggerSet, Logger
 from .viz import get_table, get_power_plot
 from .microphone import MicrophoneReader
@@ -55,7 +56,7 @@ class PitchPersistence:
 
 @component
 class PitchAngularVelocityController(ComponentInterface):
-    def __init__(self, microphone: MicrophoneReader, speed):
+    def __init__(self, microphone: MicrophoneReader, speed, logger: CallChannel, name='PitchAngularVelocityController'):
 
 
         expected_sig_length = microphone.frame_length*microphone.n_frame_buffer
@@ -66,9 +67,13 @@ class PitchAngularVelocityController(ComponentInterface):
         self.pitch_detector = pitch_detector
         self.microphone = microphone
         self.speed = speed
+        self.logger = declare_function_handler(logger, LoggerComponent.log)
+        self.pitch_persistence_check = PitchPersistence()
+        self.name = name
 
         # state 
-        self.pitch_persistence_check = PitchPersistence()
+        self.idx=0
+
 
     @loop
     @samples_producer(typecodes=['d', 'd'], default_values = [0, 0])
@@ -77,26 +82,30 @@ class PitchAngularVelocityController(ComponentInterface):
         sig = self.microphone.get_signal()
         if not len(sig)==self.pitch_detector.sig_len:
             return 0, 0
-        
 
         pitch, power = self.pitch_detector.sig2pitch(sig)
 
-        valid, pitch = self.pitch_persistence_check.new_frame(pitch, power)
+        valid, median_pitch = self.pitch_persistence_check.new_frame(pitch, power)
 
         # this is done because pitch can be nan 
         if valid:
             speed = self.speed
-            angular_velocity = self.angle2omega(pitch, 220, 120, 180)
+            angular_velocity = self.angle2omega(median_pitch, 220, 120, 180)
         else: 
             speed = 0
             angular_velocity = 0 
         
+        log_data = add_time({})
+        log_data['speed'] = speed
+        log_data['angular_velocity'] = angular_velocity
+        log_data['median_pitch'] = median_pitch
+        log_data['pitch'] = pitch
+        log_data['power'] = power
+        log_data['sig'] = sig
 
+        self.idx+=1
 
-        # self.logger.log_time("AhhhhhWheelController")
-        # self.logger.log('speed_or_invalid', speed)
-        # self.logger.log('median_pitch', np.nanmedian(self.pitch_hist))
-        # self.logger.log('balance', balance)
+        self.logger.call_no_return(self.name, log_data, self.idx)
 
         return cast(float, speed), cast(float, angular_velocity)
 
