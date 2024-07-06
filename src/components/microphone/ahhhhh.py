@@ -146,7 +146,7 @@ class PitchDetector:
     def sig2pitch(self, sig, freq_range=(90, 3000) ):
         assert len(sig)==self.sig_len
 
-        y = fft(np.concatenate(sig))[:self.n_freqs]
+        y = fft(sig)[:self.n_freqs]
         sxx = np.log(y.real**2 + y.imag**2) # type: ignore 
 
         basefreq, pitch_power = find_pitch_with_fft(sxx,  self.freqs, freq_range=freq_range)

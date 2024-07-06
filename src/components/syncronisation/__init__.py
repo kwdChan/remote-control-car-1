@@ -691,7 +691,11 @@ class ProcessStarter:
 
         # to make sure the process doesn't just get finished when the main process has nothing to run
         if self.process:
-            self.process.join()
+            # in case the process is closed by self.kill
+            try: 
+                self.process.join()
+            except:
+                pass
             
 
     

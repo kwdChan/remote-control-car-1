@@ -93,6 +93,7 @@ def start_everything():
         manager, 
         init_kwargs=dict(speed=100),
         loop_intervals={'step': 1/30}, 
+        instantiator=PitchAngularVelocityController.entry
 
     )
 
