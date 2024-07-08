@@ -118,7 +118,9 @@ def start_everything():
             save_video_frame=logger_process.incoming_rpcs['save_video_frame']
             )
     )
-
+    pitch_process.register_outgoing_rpc(
+        dict(logger=logger_process.incoming_rpcs['log'])
+    )
 
     ## Samples
     def get_pitch_drive_switch():
@@ -151,14 +153,14 @@ def start_everything():
 
 
     # return
-    result = (
+    result: List[ProcessStarter] = (
         bt_ser_process_man, 
         bluetooth_control_process.process_starter, 
         logger_process.process_starter, 
         two_wheel_process.process_starter, 
         angular_speed_control_process.process_starter, 
         picamera_process.process_starter, 
-        pitch_process
+        pitch_process.process_starter
     )
 
     result = cast(List[ProcessStarter], result)
