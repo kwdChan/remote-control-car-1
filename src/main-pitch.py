@@ -153,7 +153,7 @@ def start_everything():
 
 
     # return
-    result: List[ProcessStarter] = (
+    result = (
         bt_ser_process_man, 
         bluetooth_control_process.process_starter, 
         logger_process.process_starter, 
@@ -198,5 +198,4 @@ def retry_everything(n_times, mon_interval_sec):
 
 
 
-# TODO: the program refuses to exit for retry > 1
 retry_everything(5, mon_interval_sec = 2)
