@@ -40,6 +40,48 @@ from utils import Timer
 #         return out[0], out[3]
 #     return model
 
+@component
+class FrameMLToAngularVelocity(ComponentInterface):
+
+    ModelFuncType = Callable[[np.ndarray], float]
+
+    def __init__(self, func: Callable[[], ModelFuncType], log, name, delay_ms):
+
+        # objects
+        self.model = func()
+        self.log = declare_method_handler(log, LoggerComponent.log)
+        self.handler = ThreadHandler()
+
+        # constants
+        self.name = name
+        self.delay_ms = delay_ms
+
+        # states
+        self.idx = 0
+        self.out = 0
+
+
+    @rpc()
+    @sampler
+    def run_model(self, arr:np.ndarray): 
+        with Timer() as timer: 
+            self.out = self.model(arr)
+
+        data = {}
+        data['timelapsed'] = timer.timelapsed
+        data['out'] = self.out
+
+        self.handler.call(self.output, time_wait_ms=max(0, self.delay_ms-timer.timelapsed*1000))
+
+        self.log.call_no_return(self.name, add_time(data, 'run_model'), self.idx)
+        self.idx += 1
+
+    @samples_producer(typecodes=['d'], default_values=[0]) 
+    def output(self, time_wait_ms: float):
+        time.sleep(time_wait_ms/1000)
+        return (self.out, )
+
+
 
 @component
 class ImageMLControllerV4(ComponentInterface):
@@ -81,8 +123,10 @@ class ImageMLControllerV4(ComponentInterface):
 
         data = {}
         data['timelapsed'] = timer.timelapsed
+        data['v0'] = self.v0
+        data['v1'] = self.v1
 
-        self.handler.call(self.output, time_wait_ms=100)
+        self.handler.call(self.output, time_wait_ms=max(0, 100-timer.timelapsed*1000))
 
         self.log.call_no_return(self.name, add_time(data, 'run_model'), self.idx)
         self.idx += 1
