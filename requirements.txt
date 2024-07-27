@@ -25,3 +25,5 @@ smbus2
 python-prctl
 rpi-kms
 picamera2
+onnxruntime
+onnx

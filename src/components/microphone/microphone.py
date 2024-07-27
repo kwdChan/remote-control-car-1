@@ -1,5 +1,5 @@
 
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, List, Callable
 from pvrecorder import PvRecorder
 from scipy.fft import fft, fftfreq
 import numpy as np
@@ -12,6 +12,53 @@ def get_microphone_reader(device_index: Union[int, None], frame_length, device_n
         print(f'using device: {device_name}')
 
     
+from threading import Barrier
+class JointMicrophoneReader:
+    def __init__(self, device_indices: List[int], frame_length=512):
+        # TODO: assert that they all have the same sampling rate 
+        assert len(device_indices)
+        self.recorders: List[PvRecorder] = [
+            PvRecorder(frame_length=frame_length, device_index=i)
+            for i in device_indices
+        ]
+        
+        self.sample_rate = self.recorders[0].sample_rate
+        self.barrier = Barrier(len(self.recorders))
+        self.to_sample = True
+
+
+    def __get_frame(self, recorder_index, callback):
+        self.barrier.wait()
+        sig = self.recorders[recorder_index].read()
+        callback(recorder_index, sig)
+    
+    def start(self, callback: Callable[[int, List[float]], None]):
+        
+        def get_frame_continously(idx):
+
+            while self.to_sample: 
+                self.__get_frame(idx, callback)
+
+
+        for r in self.recorders: r.start()
+
+
+
+        self.ts = [create_thread(get_frame_continously, i) for i in range(len(self.recorders))]
+
+        for t  in self.ts: t.start()
+
+    def stop(self): 
+        self.to_sample = False
+
+
+    
+
+
+    
+
+
+
 
 class MicrophoneReader:
     """

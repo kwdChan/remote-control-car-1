@@ -8,6 +8,13 @@ from tqdm import tqdm
 import plotly.graph_objects as go
 from IPython.display import display
 
+def num_param(model: nn.Module):
+    i = 0
+    for k, v in model.state_dict().items():
+        i += np.prod(v.shape)
+    return i
+
+
 def fit_step(model: nn.Module, dataloader: DataLoader, optimiser: optim.Optimizer, loss_fn, silent=True):
     size = len(dataloader.dataset) # type: ignore
     num_batches = len(dataloader)
