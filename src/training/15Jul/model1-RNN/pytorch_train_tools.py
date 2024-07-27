@@ -89,6 +89,7 @@ def evaluate(model: nn.Module, dataloader: DataLoader, loss_fn, metrics: List=[]
     eval_loss = 0
     with torch.no_grad():
         for batch, (x, y) in enumerate(dataloader):
+            print(batch, end='                 \r')
             x, y = x.to(device), y.to(device)
             y_pred = model(x)
 
@@ -127,6 +128,7 @@ def _fit(
 
     for cb in finish_callback:
         cb(train_loss, val_loss)  # type: ignore 
+
 
 
 def fit(        

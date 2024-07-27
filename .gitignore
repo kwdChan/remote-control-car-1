@@ -8,6 +8,7 @@ venv
 src/training/data
 src/training/logs
 src/training/*/logs
-
+dataset
 tg_token.py
 venv*
+temp
