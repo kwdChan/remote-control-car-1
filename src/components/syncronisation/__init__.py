@@ -545,8 +545,12 @@ class ProcessStarter:
         old alias
         """
         self.termainate()
-
+        
+    @deprecated('old typo')
     def termainate(self):
+        self.terminate() 
+
+    def terminate(self):
         
         # TODO: change is to self.terminated 
         self.killed = True

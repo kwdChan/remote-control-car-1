@@ -8,8 +8,12 @@ from scipy import signal as ss
 
 from components.syncronisation import ComponentInterface, create_thread, component, loop, rpc, samples_producer, sampler
 
+def show_devices():
+    for index, device in enumerate(PvRecorder.get_available_devices()):
+        print(f"[{index}] {device}")
 
-def get_microphone_reader(device_index: Union[int, None], frame_length, device_name_match='usb'):
+
+def get_microphone_reader(device_index: Union[int, None], device_name_match='usb'):
     if device_index is None:
         device_index, device_name = MicrophoneReader.try_get_devices(device_name_match)
         print(f'using device: {device_name}')
@@ -25,7 +29,7 @@ class MicrophoneComponent(ComponentInterface):
         self.fs = new_fs
 
         self.required_n_sample = np.ceil(target_frame_duration*mics.sample_rate)
-        self.n_frame_required = np.ceil(self.required_n_sample/mics.frame_length)
+        self.n_frame_required = int(np.ceil(self.required_n_sample/mics.frame_length))
 
         self.actual_frame_length = mics.frame_length*self.n_frame_required
         self.actual_frame_duration = self.actual_frame_length/new_fs
@@ -40,7 +44,7 @@ class MicrophoneComponent(ComponentInterface):
         self.mics.start(self.new_frame)
 
     def new_frame(self, idx:int, sig: List[float]):
-        self.channels[idx].remove(0)
+        self.channels[idx].pop(0)
         self.channels[idx].append(sig)
 
     @rpc()
@@ -63,7 +67,7 @@ class MicrophoneComponent(ComponentInterface):
 
     @classmethod
     def entry(cls, device_indices):
-        mics = JointMicrophoneReader(device_indices, frame_length=512)
+        mics = JointMicrophoneReader(device_indices, frame_length=800)
         return cls(mics, target_frame_duration=0.4, new_fs=16000) 
         
     
@@ -191,10 +195,6 @@ class MicrophoneReader:
         return sample_rate
 
 
-    @staticmethod
-    def show_devices():
-        for index, device in enumerate(PvRecorder.get_available_devices()):
-            print(f"[{index}] {device}")
 
     @staticmethod
     def try_get_devices(match_str:str) -> Tuple[int, str]:
