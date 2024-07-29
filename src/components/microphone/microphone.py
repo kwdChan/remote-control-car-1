@@ -43,7 +43,7 @@ class MicrophoneComponent(ComponentInterface):
         # 
         self.mics.start(self.new_frame)
 
-    def new_frame(self, idx:int, sig: List[float]):
+    def new_frame(self, idx:int, sig: List[int]):
         self.channels[idx].pop(0)
         self.channels[idx].append(sig)
 
@@ -97,7 +97,7 @@ class JointMicrophoneReader:
         sig = self.recorders[recorder_index].read()
         callback(recorder_index, sig)
     
-    def start(self, callback: Callable[[int, List[float]], None]):
+    def start(self, callback: Callable[[int, List[int]], None]):
         
         def get_frame_continously(idx):
 
