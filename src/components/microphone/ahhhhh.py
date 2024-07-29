@@ -2,7 +2,7 @@ from typing import Callable, List, Union, cast
 from typing_extensions import deprecated
 import numpy as np
 
-from components.syncronisation import CallChannel, ComponentInterface, component, declare_function_handler, loop, samples_producer
+from components.syncronisation import CallChannel, ComponentInterface, component, declare_function_handler, loop, samples_producer, declare_method_handler
 from components.logger import LoggerComponent, add_time
 from data_collection.data_collection import LoggerSet, Logger
 from .viz import get_table, get_power_plot
@@ -67,7 +67,7 @@ class PitchAngularVelocityController(ComponentInterface):
         self.pitch_detector = pitch_detector
         self.microphone = microphone
         self.speed = speed
-        self.logger = declare_function_handler(logger, LoggerComponent.log)
+        self.logger = declare_method_handler(logger, LoggerComponent.log)
         self.pitch_persistence_check = PitchPersistence()
         self.name = name
 
