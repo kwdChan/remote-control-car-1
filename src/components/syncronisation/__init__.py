@@ -96,7 +96,7 @@ def shared_np_array_v2(typecode: Any, default_value: np.ndarray) -> Tuple[Callab
 
 
 
-class CallChannelV2(Generic[P, T]):
+class CallChannel(Generic[P, T]):
     """
     #TODO: testing
     #TODO: V3 with shared memory manager 
@@ -196,99 +196,6 @@ class CallChannelV2(Generic[P, T]):
         t.start()
         return t
 
-@deprecated('it is very slow to create a lock by the manager. use V2 with condition instead ')
-class CallChannel(Generic[P, T]):
-    
-
-    @staticmethod
-    def default_args_reader(args:Tuple, kwargs:Dict):
-        return args, kwargs
-
-    @staticmethod
-    def default_args_writer(args:Tuple, kwargs:Dict):
-        return args, kwargs
-
-    def __init__(
-        self, 
-        name, 
-        manager: SyncManager, 
-        args_reader: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
-        args_writer: Optional[Callable[[Tuple, Dict], Tuple[Tuple, Dict]]]=None, 
-    ):
-
-        self.name = name
-        self.manager = manager
-
-        self.args_reader = args_reader if args_reader else CallChannel.default_args_reader 
-        self.args_writer = args_writer if args_writer else CallChannel.default_args_writer
-
-        # states 
-        self.call_pending: ListProxy[Tuple[int, Any]] = manager.list()
-        self.res_pending: DictProxy[int, Any] = manager.dict()
-
-        self.response_locks: DictProxy[int, Any] = manager.dict()
-
-        self.call_id = Value('L', -1)
-        self.call_semaphore = Semaphore(0)
-        self.call_lock = Lock()
-
-    def call_no_return(self, *args: P.args, **kwargs: P.kwargs)->None:
-        
-        with self.call_lock: 
-            self.call_id.value += 1 
-            self.call_pending.append((self.call_id.value, self.args_writer(args, kwargs)))
-            self.call_semaphore.release()
-        
-    def call(self, *args: P.args, **kwargs: P.kwargs) -> Callable[[], T]:
-        """
-        TODO: this function must not be used if the return will not be assessed
-        the locks and return values will sit there indefinately and accumulate
-
-        """
-        with self.call_lock: 
-            self.call_id.value += 1 
-            self.call_pending.append((self.call_id.value, self.args_writer(args, kwargs)))
-
-            lock = self.manager.Lock()
-            lock.acquire()
-            self.response_locks[self.call_id.value] = lock
-            
-            # CANNOT RELEASE BEFORE THE self.response_locks[self.call_id] IS SET
-            self.call_semaphore.release()
-
-            this_call_id = self.call_id.value
-
-        def await_result():
-
-            lock.acquire()
-            self.response_locks.pop(this_call_id)
-
-            return self.res_pending.pop(this_call_id) 
-
-        return await_result
-
-    def await_and_handle_call(self, handler: Callable[P, T]):
-        self.call_semaphore.acquire()
-
-        # TODO: unclear if it's safe to do so. but given there's the GIL, it's probably okay? 
-        call_id, (args, kwargs) = self.call_pending.pop(0)
-        
-        res = handler(*args, **kwargs) # type: ignore
-
-        l = self.response_locks.get(call_id)
-        if l is not None:
-            self.res_pending[call_id] = res
-            l.release()
-
-    def message_handling_loop(self, handler: Callable[P, T]):
-        while True:
-            self.await_and_handle_call(handler)
-
-    def start_message_handling_thread(self, handler: Callable[P, T]):
-        # TODO: have a pool of threads to consume the messages as fast as possible 
-        t = create_thread(self.message_handling_loop, handler=handler)
-        t.start()
-        return t
 
 def declare_function_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChannel[P, T]:
     """
@@ -298,22 +205,6 @@ def declare_function_handler(obj:CallChannel, func: Callable[P, T]) ->  CallChan
     return obj
 
 def declare_method_handler(obj:CallChannel, method: Callable[Concatenate[Any, P], T]) ->  CallChannel[P, T]:
-    """
-    ignore the first argment of the callable
-
-    for type check purposes only
-    this function won't work if it is defined within the CallChannel class.
-    """
-    return obj
-
-def declare_function_handler_v2(obj:CallChannelV2, func: Callable[P, T]) ->  CallChannelV2[P, T]:
-    """
-    for type check purposes only
-    this function won't work if it is defined within the CallChannel class.
-    """
-    return obj
-
-def declare_method_handler_v2(obj:CallChannelV2, method: Callable[Concatenate[Any, P], T]) ->  CallChannelV2[P, T]:
     """
     ignore the first argment of the callable
 
