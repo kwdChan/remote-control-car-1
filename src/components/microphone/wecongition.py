@@ -25,8 +25,8 @@ class RunONNX:
     def __call__(self, *x):
         return self.ort_session.run(None, dict(zip(self.input_names, x)))
 
-
-class Wecognition:
+@component
+class Wecognition(ComponentInterface):
     def __init__(self, model_path, get_signal: CallChannel):
         self.model = RunONNX(model_path)
 
@@ -36,6 +36,9 @@ class Wecognition:
     @samples_producer(typecodes=['d'], default_values=[0])
     def main_loop(self):
         ok, sig = self.get_signal.call(0)()
+        sig = cast(np.ndarray, sig)
+        sig = sig.astype(np.float32)
+        sig /= (sig**2).sum()**(1/2)
 
         return self.model(np.array(sig)[None, None, :])
 
