@@ -1,13 +1,14 @@
 
 
-from components.controller.bluetooth_controller import BlueToothCarControlSPP_V2
-from components.controller.bluetooth_SPP_server import start_bluetooth_server_v2, start_bluetooth_server_v2b
-from components.gyroscope.gyroscope import AngularSpeedControlV3
-from components.camera import Picamera2V2
-from components.logger import LoggerComponent
-from components.two_wheels import TwoWheelsV3
-from components.controller.image_ml import ImageMLControllerV3b, ImageMLControllerV4, FrameMLToAngularVelocity
+from components.controller.bluetooth_controller import *
+from components.controller.bluetooth_SPP_server import *
+from components.gyroscope.gyroscope import *
+from components.camera import *
+from components.logger import *
+from components.two_wheels import *
+from components.controller.image_ml import *
 
 from components.syncronisation import *
 
-from components.microphone.ahhhhh import PitchAngularVelocityController
+from components.microphone.ahhhhh import *
+from components.microphone.microphone import *

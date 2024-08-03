@@ -4,9 +4,10 @@ from pvrecorder import PvRecorder
 from scipy.fft import fft, fftfreq
 import numpy as np
 from scipy import signal as ss
+from components.logger import LoggerComponent
 
 
-from components.syncronisation import ComponentInterface, create_thread, component, loop, rpc, samples_producer, sampler
+from components.syncronisation import CallChannel, ComponentInterface, create_thread, component, declare_method_handler, loop, rpc, samples_producer, sampler
 
 def show_devices():
     for index, device in enumerate(PvRecorder.get_available_devices()):
@@ -20,7 +21,7 @@ def get_microphone_reader(device_index: Union[int, None], device_name_match='usb
 
 @component
 class MicrophoneComponent(ComponentInterface):
-    def __init__(self, mics: JointMicrophoneReader, target_frame_duration:float, new_fs:int):
+    def __init__(self, mics: JointMicrophoneReader, target_frame_duration:float, new_fs:int, log: Optional[CallChannel]=None, name='MicrophoneComponent'):
         """
         output a frame of signal at a different sampling rate to the microphone 
         """
@@ -35,17 +36,38 @@ class MicrophoneComponent(ComponentInterface):
         self.actual_frame_duration = self.actual_frame_length/new_fs
 
         self.resample_ratio = new_fs/mics.sample_rate
+        self.name = name
 
+        if log: 
+            self.log = declare_method_handler(log, LoggerComponent.log)
+        else: 
+            self.log = None
 
         # states
         self.channels = [[[0]*mics.frame_length]*self.n_frame_required]*len(mics)
+        self.frame_counter = 0
+        self.log_idx = 0
 
-        # 
+        # control 
         self.mics.start(self.new_frame)
+
+
 
     def new_frame(self, idx:int, sig: List[int]):
         self.channels[idx].pop(0)
         self.channels[idx].append(sig)
+
+        if not self.log: 
+            return 
+        
+        self.frame_counter += 1 
+
+        if not (self.frame_counter % self.n_frame_required):
+            self.log.call(self.name, {'audio': self.channels}, self.log_idx)
+            self.log_idx += 1
+        
+
+
 
     @rpc()
     def get_raw_signal(self, ch):
