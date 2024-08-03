@@ -7,7 +7,7 @@ import pickle
 from .video_data import VideoSaver
 from tqdm import tqdm
 from copy import copy
-
+import warnings
 #import signal, sys, atexit
 class LoggerSet:
     def __init__(self, path:Union[str, Path]='../log/temp', overwrite_ok=False, override_save_interval=None):
@@ -104,6 +104,19 @@ class Logger:
     #         sys.exit(0)
     #     else:
     #         print('handled SIGINT')
+
+
+    def __getstate__(self):
+        warnings.warn('log is not availble after depickling/__setstate__')
+
+        state = self.__dict__.copy()
+        del state['record_lock']
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.record_lock = None
+
         
 
     def __repr__(self):
@@ -124,6 +137,7 @@ class Logger:
         log the value and the current idx
         ideally all values of the same key should have the same structure
         """
+        assert self.record_lock
         with self.record_lock: 
             idx = self.idx if overwrite_index is None else overwrite_index
             new_record = dict(idx=idx, key=key, value=copy(value))
