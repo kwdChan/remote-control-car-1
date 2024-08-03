@@ -4,7 +4,8 @@ from pvrecorder import PvRecorder
 from scipy.fft import fft, fftfreq
 import numpy as np
 from scipy import signal as ss
-from components.logger import LoggerComponent
+from components.syncronisation import ThreadHandler
+from components.logger import LoggerComponent, add_time
 
 
 from components.syncronisation import CallChannel, ComponentInterface, create_thread, component, declare_method_handler, loop, rpc, samples_producer, sampler
@@ -44,7 +45,7 @@ class MicrophoneComponent(ComponentInterface):
             self.log = None
 
         # states
-        self.channels = [[[0]*mics.frame_length]*self.n_frame_required]*len(mics)
+        self.channels = {i: [[0]*mics.frame_length]*self.n_frame_required for i in range(len(mics))}
         self.frame_counter = 0
         self.log_idx = 0
 
@@ -57,13 +58,16 @@ class MicrophoneComponent(ComponentInterface):
         self.channels[idx].pop(0)
         self.channels[idx].append(sig)
 
+        # s = self.channels[idx]
+        # self.channels[idx] = s[1:]+[sig]
+
         if not self.log: 
             return 
         
         self.frame_counter += 1 
 
-        if not (self.frame_counter % self.n_frame_required):
-            self.log.call(self.name, {'audio': self.channels}, self.log_idx)
+        if not (self.frame_counter % (self.n_frame_required*len(self.channels))):
+            self.log.call(self.name, add_time({'audio': self.channels}), self.log_idx)
             self.log_idx += 1
         
 
@@ -88,9 +92,9 @@ class MicrophoneComponent(ComponentInterface):
         return self.mics.sample_rate
 
     @classmethod
-    def entry(cls, device_indices):
-        mics = JointMicrophoneReader(device_indices, frame_length=800)
-        return cls(mics, target_frame_duration=0.4, new_fs=16000) 
+    def entry(cls, device_indices, log:Optional[CallChannel]=None):
+        mics = JointMicrophoneReader(device_indices, frame_length=1600)
+        return cls(mics, target_frame_duration=0.4, new_fs=16000, log=log) 
         
     
 from threading import Barrier
@@ -109,6 +113,7 @@ class JointMicrophoneReader:
         self.sample_rate = self.recorders[0].sample_rate
         self.barrier = Barrier(len(self.recorders))
         self.to_sample = True
+        #self.callback_executioner = ThreadHandler()
 
     def __len__(self):
         return len(self.recorders)
