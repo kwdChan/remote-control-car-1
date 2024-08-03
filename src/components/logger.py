@@ -58,5 +58,9 @@ class LoggerComponent(ComponentInterface):
             logger.save_video_frame(frame, idx)
 
     @rpc()
+    def save_logger(self, name: str):
+        self.loggers[name].save()
+
+    @rpc()
     def get_logger(self, name: str):
         return self.loggers[name]
