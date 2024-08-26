@@ -42,4 +42,11 @@ class Wecognition(ComponentInterface):
 
         return self.model(np.array(sig)[None, None, :])
 
-        
+
+def is_weee(sig):
+    ok, sig = self.get_signal.call(0)()
+    sig = cast(np.ndarray, sig)
+    sig = sig.astype(np.float32)
+    sig /= (sig**2).sum()**(1/2)
+
+    return self.model(np.array(sig)[None, None, :])
