@@ -69,7 +69,7 @@ class WecognitionModel:
         sig = sig.astype(np.float32)
         sig /= (sig**2).sum()**(1/2)
 
-        return self.model(np.array(sig)[None, None, :])[-1] > 0.7
+        return self.model(np.array(sig)[None, None, :])[-1] > 0.6
     
     @property
     def fs(self):
@@ -110,7 +110,7 @@ class WeDrive(ComponentInterface):
         idx = int(n_sec_before*self.fs)
         if self.during_eee: 
             new_pitch_f = self.detect_pitch_frequency(
-                sig, self.fs, 0.5, 600,
+                sig, self.fs, 0.25, 600,
             )
 
             if abs(new_pitch_f - self.prev_pitch_f) < self.max_pitch_f_change:
