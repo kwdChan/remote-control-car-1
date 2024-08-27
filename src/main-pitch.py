@@ -15,6 +15,8 @@ from components import PitchAngularVelocityController, get_switches
 from data_collection.data_collection import LoggerSet
 from multiprocessing import Manager
 import numpy as np
+from components.microphone import wecongition as we
+
 import datetime
 import RPi.GPIO as GPIO
 import sys
@@ -35,9 +37,9 @@ def start_everything():
         LoggerComponent, 
         manager, 
         init_kwargs=dict(
-            loggerset = loggerset
+            loggerset = loggerset, 
+            sham=True
         ),
-        loop_intervals={'step': 1/100},
     )
 
     two_wheel_process = ComponentStarter(
@@ -76,26 +78,17 @@ def start_everything():
     bt_ser_out, bt_ser_process_man = start_bluetooth_server_v2b(manager)
 
 
-    picamera_process = ComponentStarter(
-        Picamera2V2, 
+
+    wecog_process = ComponentStarter(
+        we.WeDrive, 
         manager, 
-        init_kwargs=dict(
-            resolution=(114, 64), 
-            framerate=30,
-            name='Picamera2V2'
-        ),
-        loop_intervals={'step': 1/30},
-        sample_setup_kwargs=dict(default_values=[np.zeros((64, 114, 3), dtype=np.uint8)])
+        loop_intervals={'main_loop': 0.05},
+        instantiator=we.WeDrive.entry,
+        init_kwargs = dict(
+            model_path='wecongition_model_v0.onnx'
+        )
     )
 
-    pitch_process = ComponentStarter(
-        PitchAngularVelocityController,
-        manager, 
-        init_kwargs=dict(speed=100),
-        loop_intervals={'step': 1/30}, 
-        instantiator=PitchAngularVelocityController.entry
-
-    )
 
     ## RPCs
     two_wheel_process.register_outgoing_rpc(
@@ -111,22 +104,11 @@ def start_everything():
         dict(log=logger_process.incoming_rpcs['log'])
     )
 
-    picamera_process.register_outgoing_rpc(
-        dict(
-            log=logger_process.incoming_rpcs['log'],
-            setup_video_saver=logger_process.incoming_rpcs['setup_video_saver'],
-            save_video_frame=logger_process.incoming_rpcs['save_video_frame']
-            )
-    )
-    pitch_process.register_outgoing_rpc(
-        dict(logger=logger_process.incoming_rpcs['log'])
-    )
-
     ## Samples
     def get_pitch_drive_switch():
         return bool(bt_ser_out[0]().get('start'))
 
-    to_imu_controller = get_switches(pitch_process.outgoing_samples, bluetooth_control_process.outgoing_samples, get_pitch_drive_switch)
+    to_imu_controller = get_switches(wecog_process.outgoing_samples, bluetooth_control_process.outgoing_samples, get_pitch_drive_switch)
 
 
     two_wheel_process.register_incoming_samples(
@@ -136,7 +118,6 @@ def start_everything():
     angular_speed_control_process.register_incoming_samples(
         to_imu_controller
     )
-
 
     bluetooth_control_process.register_incoming_samples(
         bt_ser_out
@@ -148,8 +129,7 @@ def start_everything():
     logger_process.start()
     two_wheel_process.start()
     angular_speed_control_process.start()
-    picamera_process.start()
-    pitch_process.start()
+    wecog_process.start()
 
 
     # return
@@ -159,15 +139,14 @@ def start_everything():
         logger_process.process_starter, 
         two_wheel_process.process_starter, 
         angular_speed_control_process.process_starter, 
-        picamera_process.process_starter, 
-        pitch_process.process_starter
+        wecog_process.process_starter, 
     )
 
     result = cast(List[ProcessStarter], result)
     def signal_handler(signum, frame):
 
         for r in result:
-            r.kill()
+            r.terminate()
 
 
     atexit.register(signal_handler, None, None)

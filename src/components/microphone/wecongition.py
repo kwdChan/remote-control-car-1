@@ -80,11 +80,6 @@ class WecognitionModel:
         return int(16000*0.4)
 
 
-
-def get_to_get_pitch(persistence_sec=0.3):
-    pass
-
-
 @component
 class WeDrive(ComponentInterface):
     def __init__(self, model_path, mic: MicrophoneReader):
@@ -151,7 +146,7 @@ class WeDrive(ComponentInterface):
             pitch = self.prev_pitch_f
             angular_velocity = angle2omega(pitch, 220, 120, 180)
 
-            return 100, self.prev_pitch_f#angular_velocity
+            return 100, angular_velocity
         else:
             # not during eee
             return 0, 0
