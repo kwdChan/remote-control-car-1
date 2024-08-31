@@ -69,7 +69,7 @@ class WecognitionModel:
         sig = sig.astype(np.float32)
         sig /= (sig**2).sum()**(1/2)
 
-        return self.model(np.array(sig)[None, None, :])[-1] > 0.6
+        return self.model(np.array(sig)[None, None, :])[-1] > 0.7
     
     @property
     def fs(self):
@@ -93,6 +93,8 @@ class WeDrive(ComponentInterface):
 
 
         self.during_eee = False
+        self.max_tolerance = 2
+        self.tolerance = self.max_tolerance
 
         self.prev_pitch_f = 0
         self.max_pitch_f_change = 25
@@ -115,10 +117,14 @@ class WeDrive(ComponentInterface):
 
             if abs(new_pitch_f - self.prev_pitch_f) < self.max_pitch_f_change:
                 self.prev_pitch_f = new_pitch_f
-            else:
+                self.tolerance = self.max_tolerance
+
+            elif self.tolerance:
+                self.tolerance -= 1
+                
+            else: 
                 self.during_eee = False
                 self.prev_pitch_f = 0
-
 
 
         elif self.weee_model(sig[(-self.weee_model.siglen-idx):(len(sig)-idx)]): 
@@ -146,7 +152,7 @@ class WeDrive(ComponentInterface):
             pitch = self.prev_pitch_f
             angular_velocity = angle2omega(pitch, 220, 120, 180)
 
-            return 100, angular_velocity
+            return 70, angular_velocity
         else:
             # not during eee
             return 0, 0
