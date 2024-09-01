@@ -49,6 +49,7 @@ eadline is approaching so I started working on the pitch control
 
 ## 5. Jul - We-recogition Model 
 The deadline is approaching so I started working on the pitch control
+
 The goal is to recognise the word "we" and then trigger the pitch detection
 
 #### Method
