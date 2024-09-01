@@ -93,6 +93,8 @@ class WeDrive(ComponentInterface):
 
 
         self.during_eee = False
+        self.max_tolerance = 2
+        self.tolerance = self.max_tolerance
 
         self.prev_pitch_f = 0
         self.max_pitch_f_change = 25
@@ -110,15 +112,19 @@ class WeDrive(ComponentInterface):
         idx = int(n_sec_before*self.fs)
         if self.during_eee: 
             new_pitch_f = self.detect_pitch_frequency(
-                sig, self.fs, 0.5, 600,
+                sig, self.fs, 0.25, 600,
             )
 
             if abs(new_pitch_f - self.prev_pitch_f) < self.max_pitch_f_change:
                 self.prev_pitch_f = new_pitch_f
-            else:
+                self.tolerance = self.max_tolerance
+
+            elif self.tolerance:
+                self.tolerance -= 1
+                
+            else: 
                 self.during_eee = False
                 self.prev_pitch_f = 0
-
 
 
         elif self.weee_model(sig[(-self.weee_model.siglen-idx):(len(sig)-idx)]): 
@@ -146,7 +152,7 @@ class WeDrive(ComponentInterface):
             pitch = self.prev_pitch_f
             angular_velocity = angle2omega(pitch, 220, 120, 180)
 
-            return 100, angular_velocity
+            return 70, angular_velocity
         else:
             # not during eee
             return 0, 0
